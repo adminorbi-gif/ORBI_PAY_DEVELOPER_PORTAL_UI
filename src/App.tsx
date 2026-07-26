@@ -13,6 +13,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   fetchPortalSnapshot,
@@ -1051,7 +1052,28 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
   const [mfaRequired, setMfaRequired] = useState(true);
   const [liveAccess, setLiveAccess] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [mfaSetup, setMfaSetup] = useState<{ otpauthUri: string; secret: string }>();
   const [working, setWorking] = useState(false);
+
+  const loadOwnMfa = async () => {
+    setMessage(undefined);
+    try {
+      const response = await fetch(`${config.bffBaseUrl}/auth/mfa`, {
+        headers: {
+          Accept: 'application/json',
+          ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
+        },
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        setMessage(String(body?.error || `MFA setup failed with HTTP ${response.status}`));
+        return;
+      }
+      setMfaSetup(body.data);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to load authenticator setup.');
+    }
+  };
 
   const createUser = async () => {
     setWorking(true);
@@ -1069,6 +1091,7 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
       const body = await response.json().catch(() => null);
       setMessage(response.ok ? 'Portal account created.' : String(body?.error || `Request failed with HTTP ${response.status}`));
       if (response.ok) {
+        if (body?.data?.mfaSetup?.otpauthUri) setMfaSetup(body.data.mfaSetup);
         setEmail('');
         setName('');
         setPassword('');
@@ -1108,7 +1131,9 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
         <button className="button-primary inline-link" disabled={working || !email || !password || !name} onClick={createUser}>
           {working ? 'Creating' : 'Create account'}
         </button>
+        <button className="ghost-action inline-link" onClick={loadOwnMfa}>Show my QR setup</button>
         {message && <div className="inline-message">{message}</div>}
+        {mfaSetup && <AuthenticatorQr setup={mfaSetup} />}
       </div>
 
       <div className="panel wide-panel">
@@ -1140,6 +1165,22 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
           ])}
           empty="No admin audit events yet."
         />
+      </div>
+    </div>
+  );
+}
+
+function AuthenticatorQr({ setup }: { setup: { otpauthUri: string; secret: string } }) {
+  return (
+    <div className="qr-setup">
+      <div className="qr-box">
+        <QRCodeSVG value={setup.otpauthUri} size={168} level="M" includeMargin />
+      </div>
+      <div>
+        <h3>Scan with Authenticator</h3>
+        <p>Open Google Authenticator, Microsoft Authenticator, Authy, 2FAS, or Aegis and scan this QR code.</p>
+        <Copyable value={setup.secret} />
+        <small>Use the manual key only if QR scan is not available.</small>
       </div>
     </div>
   );

@@ -143,6 +143,13 @@ export function signPortalSession(account) {
   return `${unsigned}.${hmac(unsigned)}`;
 }
 
+export function totpSetupUri(account) {
+  if (!account?.totpSecret) return undefined;
+  const issuer = encodeURIComponent(process.env.ORBI_PORTAL_TOTP_ISSUER || 'ORBI Pay Developer Portal');
+  const label = encodeURIComponent(`${process.env.ORBI_PORTAL_TOTP_ISSUER || 'ORBI Pay'}:${account.email}`);
+  return `otpauth://totp/${label}?secret=${encodeURIComponent(account.totpSecret)}&issuer=${issuer}&algorithm=SHA1&digits=6&period=30`;
+}
+
 export function verifyPortalSessionToken(token) {
   if (!token || typeof token !== 'string') return { ok: false, status: 401, error: 'Sign in to continue.' };
   const parts = token.split('.');
@@ -273,6 +280,11 @@ export async function createPortalUser(req, input) {
   const iterations = 210000;
   const hash = hashPassword(password, salt, iterations);
   const userId = `portal_user_${crypto.randomUUID()}`;
+  const totpSecret = input.totpSecret
+    ? String(input.totpSecret).trim().replace(/\s+/g, '').toUpperCase()
+    : Boolean(input.mfaRequired)
+      ? randomBase32(20)
+      : null;
   const result = await pool.query(
     `insert into public.orbi_portal_users (
       user_id, email, name, role, permissions, live_access, service_codes,
@@ -290,7 +302,7 @@ export async function createPortalUser(req, input) {
       salt,
       hash,
       iterations,
-      input.totpSecret ? String(input.totpSecret).trim().replace(/\s+/g, '').toUpperCase() : null,
+      totpSecret,
       Boolean(input.mfaRequired),
     ],
   );
@@ -299,7 +311,14 @@ export async function createPortalUser(req, input) {
     target: String(input.email || '').trim().toLowerCase(),
     metadata: { role, liveAccess: Boolean(input.liveAccess), createdUserId: userId },
   });
-  return { ok: true, data: publicPortalUser(accountFromRow(result.rows[0])) };
+  const created = accountFromRow(result.rows[0]);
+  return {
+    ok: true,
+    data: {
+      ...publicPortalUser(created),
+      mfaSetup: created.mfaRequired ? { otpauthUri: totpSetupUri(created), secret: created.totpSecret } : undefined,
+    },
+  };
 }
 
 export async function updatePortalUser(req, userId, input) {
@@ -397,6 +416,18 @@ function base32Decode(value) {
   const bytes = [];
   for (let i = 0; i + 8 <= bits.length; i += 8) bytes.push(parseInt(bits.slice(i, i + 8), 2));
   return Buffer.from(bytes);
+}
+
+function randomBase32(bytes = 20) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+  const data = crypto.randomBytes(bytes);
+  let bits = '';
+  for (const byte of data) bits += byte.toString(2).padStart(8, '0');
+  let out = '';
+  for (let i = 0; i < bits.length; i += 5) {
+    out += alphabet[parseInt(bits.slice(i, i + 5).padEnd(5, '0'), 2)];
+  }
+  return out;
 }
 
 function totpCode(secret, stepOffset = 0) {

@@ -42,6 +42,7 @@ ORBI_PORTAL_ADMIN_PASSWORD_HASH=<pbkdf2-sha256-base64url-hash>
 ORBI_PORTAL_ADMIN_PASSWORD_ITERATIONS=210000
 ORBI_PORTAL_ADMIN_TOTP_SECRET=<base32-authenticator-secret>
 ORBI_PORTAL_ADMIN_MFA_REQUIRED=true
+ORBI_PORTAL_TOTP_ISSUER=ORBI Pay Developer Portal
 ```
 
 Role control must come from login/session claims:
@@ -61,6 +62,9 @@ For production, set `ORBI_PORTAL_DATABASE_URL`. The BFF creates
 `orbi_portal_users` and `orbi_portal_audit_events` if they do not exist. Without
 the database URL, the portal can only use the bootstrap admin from environment
 variables and cannot persist team users or admin audit events.
+
+MFA QR setup is generated inside the browser from the server-provided
+`otpauth://` URI. The portal does not call third-party QR services.
 
 To generate a password hash for a bootstrap admin:
 
