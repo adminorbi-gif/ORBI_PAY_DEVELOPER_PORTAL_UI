@@ -63,7 +63,17 @@ export async function portalGatewayFetch({
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
+  let data = null;
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      data = {
+        success: false,
+        error: response.ok ? 'Portal gateway returned a non-JSON response.' : `Portal gateway returned HTTP ${response.status}.`,
+      };
+    }
+  }
   return { response, data };
 }
 
