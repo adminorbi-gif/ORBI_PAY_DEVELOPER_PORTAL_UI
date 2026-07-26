@@ -25,7 +25,7 @@ secrets, OTP evidence, wallet authority fields, or provider credentials. The
 Vercel BFF reads server-only gateway proxy variables without the `VITE_` prefix.
 It does not connect to the database and it does not sign portal sessions.
 
-Server-only Vercel variables:
+Server-only Vercel variables for the portal proxy only:
 
 ```env
 ORBI_PAY_GATEWAY_SANDBOX_BASE_URL=https://sandbox-pay.orbifinancial.com
@@ -35,21 +35,8 @@ ORBI_PORTAL_LIVE_OPERATOR_KEY=<server-only-live-operator-key>
 ```
 
 Portal authentication, MFA, users, RBAC, audit events, and admin actions live in
-Pay Gateway backend. Configure these on the Pay Gateway container, not on Vercel:
-
-```env
-PAYMENT_GATEWAY_PORTAL_AUTH_SECRET=<server-only-session-signing-secret>
-PAYMENT_GATEWAY_PORTAL_SESSION_TTL_SECONDS=28800
-PAYMENT_GATEWAY_PORTAL_ADMIN_EMAIL=<admin-email>
-PAYMENT_GATEWAY_PORTAL_ADMIN_NAME=ORBI Admin
-PAYMENT_GATEWAY_PORTAL_ADMIN_ROLE=admin
-PAYMENT_GATEWAY_PORTAL_ADMIN_PASSWORD_SALT=<password-salt>
-PAYMENT_GATEWAY_PORTAL_ADMIN_PASSWORD_HASH=<pbkdf2-sha256-base64url-hash>
-PAYMENT_GATEWAY_PORTAL_ADMIN_PASSWORD_ITERATIONS=210000
-PAYMENT_GATEWAY_PORTAL_ADMIN_TOTP_SECRET=<base32-authenticator-secret>
-PAYMENT_GATEWAY_PORTAL_ADMIN_MFA_REQUIRED=true
-PAYMENT_GATEWAY_PORTAL_TOTP_ISSUER=ORBI Pay Developer Portal
-```
+Pay Gateway backend. Do not put Pay Gateway container variables in Vercel.
+Configure `PAYMENT_GATEWAY_PORTAL_*` only in the Pay Gateway runtime env.
 
 Role control must come from login/session claims:
 
