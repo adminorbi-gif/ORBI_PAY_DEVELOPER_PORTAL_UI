@@ -144,7 +144,7 @@ export async function loginPortalWithOtp(config: PortalConfig, email: string, pa
     const response = await fetch(`${config.bffBaseUrl}/auth/login`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, otp }),
+      body: JSON.stringify({ email, password, otp, environment: config.environment }),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
@@ -161,14 +161,16 @@ export async function loginPortalWithOtp(config: PortalConfig, email: string, pa
 export async function validatePortalSession(config: PortalConfig): Promise<GatewayResult<Omit<PortalSession, 'token'>>> {
   if (!config.sessionToken) return { ok: false, status: 401, error: 'No active portal session.' };
   try {
-    const response = await fetch(`${config.bffBaseUrl}/auth/session`, {
+    const url = new URL(`${config.bffBaseUrl}/auth/session`, window.location.origin);
+    url.searchParams.set('environment', config.environment);
+    const response = await fetch(url, {
       headers: { Accept: 'application/json', Authorization: `Bearer ${config.sessionToken}` },
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
       return { ok: false, status: response.status, error: String(body?.error || `Session check failed with HTTP ${response.status}`), detail: body };
     }
-    return { ok: true, data: body as Omit<PortalSession, 'token'> };
+    return { ok: true, data: unwrapGatewayEnvelope<Omit<PortalSession, 'token'>>(body) };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Session check failed.', detail: error };
   }
@@ -176,7 +178,9 @@ export async function validatePortalSession(config: PortalConfig): Promise<Gatew
 
 export async function logoutPortal(config: PortalConfig) {
   if (config.sessionToken) {
-    await fetch(`${config.bffBaseUrl}/auth/logout`, {
+    const url = new URL(`${config.bffBaseUrl}/auth/logout`, window.location.origin);
+    url.searchParams.set('environment', config.environment);
+    await fetch(url, {
       method: 'POST',
       headers: { Accept: 'application/json', Authorization: `Bearer ${config.sessionToken}` },
     }).catch(() => undefined);

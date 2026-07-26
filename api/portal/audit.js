@@ -1,7 +1,10 @@
-import { json, listPortalAuditEvents } from './_shared.js';
+import { json, proxyPortalRequest, readEnvironment } from './_shared.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') return json(res, 405, { error: 'Method not allowed.' });
-  const result = await listPortalAuditEvents(req);
-  return json(res, result.ok ? 200 : result.status, result.ok ? { success: true, data: result.data } : { error: result.error });
+  return proxyPortalRequest(req, res, {
+    path: '/v1/portal/audit-events',
+    method: 'GET',
+    environment: readEnvironment(req.query.environment),
+  });
 }

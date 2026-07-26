@@ -1,6 +1,11 @@
-import { json } from '../_shared.js';
+import { json, proxyPortalRequest, readEnvironment } from '../_shared.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return json(res, 405, { error: 'Method not allowed.' });
-  return json(res, 200, { success: true });
+  return proxyPortalRequest(req, res, {
+    path: '/v1/portal/auth/logout',
+    method: 'POST',
+    body: {},
+    environment: readEnvironment(req.query.environment),
+  });
 }

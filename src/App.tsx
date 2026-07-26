@@ -1058,7 +1058,9 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
   const loadOwnMfa = async () => {
     setMessage(undefined);
     try {
-      const response = await fetch(`${config.bffBaseUrl}/auth/mfa`, {
+      const url = new URL(`${config.bffBaseUrl}/auth/mfa`, window.location.origin);
+      url.searchParams.set('environment', config.environment);
+      const response = await fetch(url, {
         headers: {
           Accept: 'application/json',
           ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
@@ -1079,7 +1081,9 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
     setWorking(true);
     setMessage(undefined);
     try {
-      const response = await fetch(`${config.bffBaseUrl}/users`, {
+      const url = new URL(`${config.bffBaseUrl}/users`, window.location.origin);
+      url.searchParams.set('environment', config.environment);
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
@@ -1148,7 +1152,7 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
             user.liveAccess ? 'Enabled' : 'Sandbox only',
             user.enabled === false ? 'Disabled' : 'Enabled',
           ])}
-          empty="No portal users returned. Configure ORBI_PORTAL_DATABASE_URL to manage team access from the portal."
+          empty="No portal users returned. Team access is managed by the Pay Gateway backend."
         />
       </div>
 

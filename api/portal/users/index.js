@@ -1,11 +1,10 @@
-import { createPortalUser, json, listPortalUsers, readJsonBody } from '../_shared.js';
+import { json, proxyPortalRequest, readEnvironment, readJsonBody } from '../_shared.js';
 
 export default async function handler(req, res) {
+  const environment = readEnvironment(req.query.environment);
   if (req.method === 'GET') {
-    const result = await listPortalUsers(req);
-    return json(res, result.ok ? 200 : result.status, result.ok ? { success: true, data: result.data } : { error: result.error });
+    return proxyPortalRequest(req, res, { path: '/v1/portal/users', method: 'GET', environment });
   }
-
   if (req.method === 'POST') {
     let body;
     try {
@@ -13,9 +12,7 @@ export default async function handler(req, res) {
     } catch {
       return json(res, 400, { error: 'Invalid JSON body.' });
     }
-    const result = await createPortalUser(req, body);
-    return json(res, result.ok ? 200 : result.status, result.ok ? { success: true, data: result.data } : { error: result.error });
+    return proxyPortalRequest(req, res, { path: '/v1/portal/users', method: 'POST', body, environment });
   }
-
   return json(res, 405, { error: 'Method not allowed.' });
 }
