@@ -16,16 +16,26 @@ Create `.env.local` from `.env.example`:
 
 ```env
 VITE_ORBI_PAY_GATEWAY_BASE_URL=https://sandbox-pay.orbifinancial.com
+VITE_ORBI_PORTAL_BFF_BASE_URL=/api/portal
 VITE_ORBI_PORTAL_ENVIRONMENT=sandbox
 VITE_ORBI_PORTAL_ACTOR_ROLE=public_developer
-VITE_ORBI_PORTAL_OPERATOR_KEY=<internal-operator-key>
-VITE_ORBI_PAY_SERVICE_KEY=<optional-service-key-for-runtime-profile>
+VITE_ORBI_PORTAL_SESSION_TOKEN=
 ```
 
-`VITE_ORBI_PORTAL_OPERATOR_KEY` is only acceptable for trusted internal builds
-while the portal backend/BFF is being added. Production browser bundles must not
-expose operator keys, service keys, webhook secrets, OTP evidence, wallet
-authority fields, or provider credentials.
+Production browser bundles must not expose operator keys, service keys, webhook
+secrets, OTP evidence, wallet authority fields, or provider credentials. The
+Vercel BFF reads server-only variables without the `VITE_` prefix.
+
+Server-only Vercel variables:
+
+```env
+ORBI_PAY_GATEWAY_SANDBOX_BASE_URL=https://sandbox-pay.orbifinancial.com
+ORBI_PAY_GATEWAY_LIVE_BASE_URL=https://pay.orbifinancial.com
+ORBI_PORTAL_SANDBOX_OPERATOR_KEY=<server-only-sandbox-operator-key>
+ORBI_PORTAL_LIVE_OPERATOR_KEY=<server-only-live-operator-key>
+ORBI_PORTAL_BFF_SESSION_TOKEN=<temporary-staff-session-token>
+ORBI_PORTAL_BFF_SESSION_ROLE=operator
+```
 
 Role control must come from login/session claims:
 
@@ -36,8 +46,10 @@ operator         -> service approval, scopes, keys, secrets, webhook replay
 admin            -> operator access plus risk, account, and audit oversight
 ```
 
-`VITE_ORBI_PORTAL_ACTOR_ROLE` is only a local adapter until the Auth/BFF session
-injects the authenticated role. It is not an authorization boundary.
+`VITE_ORBI_PORTAL_ACTOR_ROLE` is only a local adapter until Auth/OIDC session
+claims are connected. It is not an authorization boundary. Operator actions are
+proxied through `/api/portal/gateway` and require the server-side BFF session
+token.
 
 Public and registered developers do not get a Live environment switch. They use
 sandbox by default, then submit a production access request. ORBI operator/admin

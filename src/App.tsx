@@ -107,7 +107,7 @@ export function App() {
 
   useEffect(() => {
     void loadPortal();
-  }, [config.baseUrl, config.environment, config.operatorKey, config.serviceKey]);
+  }, [config.baseUrl, config.bffBaseUrl, config.environment, config.sessionToken]);
 
   const navigate = (next: SectionId) => {
     setSection(next);
@@ -308,9 +308,9 @@ function ConnectionBanner({
   role: PortalRole;
   onRefresh: () => void;
 }) {
-  const hasOperatorKey = Boolean(config.operatorKey);
+  const hasStaffSession = Boolean(config.sessionToken);
   const healthReady = Boolean(state.snapshot?.health || state.snapshot?.ready);
-  const tone = healthReady ? 'success' : hasOperatorKey ? 'warning' : 'danger';
+  const tone = healthReady ? 'success' : hasStaffSession ? 'warning' : 'danger';
   const isStaff = roleCanManageServices(role);
 
   return (
@@ -325,8 +325,8 @@ function ConnectionBanner({
               : 'Preparing your developer workspace'}
         </span>
       </div>
-      {!hasOperatorKey && isStaff && (
-        <span className="credential-warning">Staff access is required for administration tools.</span>
+      {!hasStaffSession && isStaff && (
+        <span className="credential-warning">Staff session is required for administration tools.</span>
       )}
       <button className="ghost-action" onClick={onRefresh} disabled={state.loading}>
         <RefreshCcw size={15} /> {state.loading ? 'Loading' : 'Refresh'}
@@ -349,11 +349,9 @@ function EnterpriseCommandStrip({
   const services = state.snapshot?.services || [];
   const activeServices = services.filter((service) => String(service.status || '').toLowerCase() === 'active');
   const isStaff = roleCanManageServices(role);
-  const credentialState = config.operatorKey
+  const credentialState = config.sessionToken
     ? 'Staff access ready'
-    : config.serviceKey
-      ? 'Developer access ready'
-      : 'Sign in to manage';
+    : 'Sign in to manage';
 
   return (
     <div className="command-strip" aria-label="Enterprise portal status">

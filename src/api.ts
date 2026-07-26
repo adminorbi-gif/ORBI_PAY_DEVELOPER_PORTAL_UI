@@ -9,9 +9,9 @@ export type GatewayResult<T> =
 
 export type PortalConfig = {
   baseUrl: string;
+  bffBaseUrl: string;
   environment: PortalEnvironment;
-  operatorKey?: string;
-  serviceKey?: string;
+  sessionToken?: string;
 };
 
 export type ServiceRecord = Record<string, unknown> & {
@@ -82,10 +82,17 @@ const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');
 
 export const getPortalConfig = (environment: PortalEnvironment): PortalConfig => ({
   baseUrl: normalizeBaseUrl(import.meta.env.VITE_ORBI_PAY_GATEWAY_BASE_URL || 'https://sandbox-pay.orbifinancial.com'),
+  bffBaseUrl: normalizeBaseUrl(import.meta.env.VITE_ORBI_PORTAL_BFF_BASE_URL || '/api/portal'),
   environment,
-  operatorKey: import.meta.env.VITE_ORBI_PORTAL_OPERATOR_KEY || undefined,
-  serviceKey: import.meta.env.VITE_ORBI_PAY_SERVICE_KEY || undefined,
+  sessionToken:
+    window.localStorage.getItem('orbi_portal_session_token') ||
+    import.meta.env.VITE_ORBI_PORTAL_SESSION_TOKEN ||
+    undefined,
 });
+
+function shouldUseBff(config: PortalConfig) {
+  return Boolean(config.bffBaseUrl);
+}
 
 const unwrapGatewayEnvelope = <T>(body: unknown): T => {
   if (body && typeof body === 'object' && 'success' in body) {
@@ -105,6 +112,42 @@ export async function gatewayRequest<T>(
   credential: CredentialMode = 'none',
   init: RequestInit = {},
 ): Promise<GatewayResult<T>> {
+  if (credential !== 'none' && shouldUseBff(config)) {
+    try {
+      const headers = new Headers({ Accept: 'application/json', 'Content-Type': 'application/json' });
+      if (config.sessionToken) {
+        headers.set('Authorization', `Bearer ${config.sessionToken}`);
+      }
+      const response = await fetch(`${config.bffBaseUrl}/gateway`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          environment: config.environment,
+          credential,
+          path,
+          method: init.method || 'GET',
+          body: init.body ? JSON.parse(String(init.body)) : undefined,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        return {
+          ok: false,
+          status: response.status,
+          error: String(body?.error || body?.message || `Portal BFF returned HTTP ${response.status}`),
+          detail: body,
+        };
+      }
+      return { ok: true, data: unwrapGatewayEnvelope<T>(body) };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Portal BFF request failed.',
+        detail: error,
+      };
+    }
+  }
+
   const headers = new Headers(init.headers);
   headers.set('Accept', 'application/json');
   headers.set('x-orbi-environment', config.environment === 'live' ? 'Production' : 'Demo');
@@ -114,17 +157,15 @@ export async function gatewayRequest<T>(
   }
 
   if (credential === 'operator') {
-    if (!config.operatorKey) {
+    if (!config.sessionToken) {
       return { ok: false, error: 'Operator key is required for this developer portal endpoint.' };
     }
-    headers.set('x-orbi-pay-operator-key', config.operatorKey);
   }
 
   if (credential === 'service') {
-    if (!config.serviceKey) {
+    if (!config.sessionToken) {
       return { ok: false, error: 'Service key is required for this runtime endpoint.' };
     }
-    headers.set('x-orbi-pay-service-key', config.serviceKey);
   }
 
   try {
@@ -163,8 +204,27 @@ const arrayFrom = <T>(result: GatewayResult<unknown>, key?: string): T[] => {
 const okData = <T>(result: GatewayResult<T>): T | undefined => (result.ok ? result.data : undefined);
 
 export async function fetchPortalSnapshot(config: PortalConfig, accessLevel: PortalAccessLevel) {
+  if (shouldUseBff(config)) {
+    const url = new URL(`${config.bffBaseUrl}/snapshot`, window.location.origin);
+    url.searchParams.set('environment', config.environment);
+    url.searchParams.set('accessLevel', accessLevel);
+    try {
+      const headers = new Headers({ Accept: 'application/json' });
+      if (config.sessionToken) {
+        headers.set('Authorization', `Bearer ${config.sessionToken}`);
+      }
+      const response = await fetch(url, { headers });
+      const body = await response.json().catch(() => null);
+      if (response.ok && body?.snapshot) {
+        return { snapshot: body.snapshot as PortalSnapshot, errors: Array.isArray(body.errors) ? body.errors : [] };
+      }
+    } catch {
+      // Local Vite dev does not serve Vercel functions. Fall back to safe direct reads.
+    }
+  }
+
   const canUseOperatorEndpoints = accessLevel === 'operator' || accessLevel === 'admin';
-  const canUseServiceEndpoints = Boolean(config.serviceKey) && accessLevel !== 'public';
+  const canUseServiceEndpoints = Boolean(config.sessionToken) && accessLevel !== 'public';
   const operatorArray = <T,>(path: string) =>
     canUseOperatorEndpoints
       ? gatewayRequest<T>(config, path, 'operator')
