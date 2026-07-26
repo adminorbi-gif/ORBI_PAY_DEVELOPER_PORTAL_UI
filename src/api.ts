@@ -295,6 +295,19 @@ const arrayFrom = <T>(result: GatewayResult<unknown>, key?: string): T[] => {
 
 const okData = <T>(result: GatewayResult<T>): T | undefined => (result.ok ? result.data : undefined);
 
+const emptySnapshot = (): PortalSnapshot => ({
+  services: [],
+  applications: [],
+  events: [],
+  webhookDeliveries: [],
+  docs: [],
+  sdks: [],
+  consentScopes: [],
+  sandboxAccounts: [],
+  portalUsers: [],
+  portalAudit: [],
+});
+
 export async function fetchPortalSnapshot(config: PortalConfig, accessLevel: PortalAccessLevel) {
   if (shouldUseBff(config)) {
     const url = new URL(`${config.bffBaseUrl}/snapshot`, window.location.origin);
@@ -310,8 +323,15 @@ export async function fetchPortalSnapshot(config: PortalConfig, accessLevel: Por
       if (response.ok && body?.snapshot) {
         return { snapshot: body.snapshot as PortalSnapshot, errors: Array.isArray(body.errors) ? body.errors : [] };
       }
-    } catch {
-      // Local Vite dev does not serve Vercel functions. Fall back to safe direct reads.
+      return {
+        snapshot: emptySnapshot(),
+        errors: [{ name: 'portalSnapshot', error: String(body?.error || `Portal BFF returned HTTP ${response.status}`) }],
+      };
+    } catch (error) {
+      return {
+        snapshot: emptySnapshot(),
+        errors: [{ name: 'portalSnapshot', error: error instanceof Error ? error.message : 'Portal BFF snapshot failed.' }],
+      };
     }
   }
 

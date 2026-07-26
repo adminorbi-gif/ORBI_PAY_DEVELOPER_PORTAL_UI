@@ -1,6 +1,17 @@
-import { gatewayFetch, json, readEnvironment, readJsonBody, requirePermission, requirePortalSession, writePortalAuditEvent } from './_shared.js';
+import { gatewayFetch, json, readEnvironment, readJsonBody, requirePermission, writePortalAuditEvent } from './_shared.js';
 
 const allowedOperatorPaths = [
+  { pattern: /^\/v1\/developer\/services$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/services\/[^/]+$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/service-applications$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/events$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/webhook-deliveries$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/docs-catalog$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/sdk-catalog$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/consent-scopes$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/environment-profiles$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/sandbox-simulator\/accounts$/, permission: 'developer:read_all', methods: ['GET'] },
+  { pattern: /^\/v1\/developer\/integration-health$/, permission: 'developer:read_all', methods: ['GET'] },
   { pattern: /^\/v1\/developer\/services\/[^/]+\/scope-requests$/, permission: 'developer:manage_scopes' },
   { pattern: /^\/v1\/developer\/service-applications\/[^/]+\/approve$/, permission: 'developer:approve_applications', confirmation: true },
   { pattern: /^\/v1\/developer\/services\/[^/]+\/status$/, permission: 'developer:manage_services', confirmation: true },
@@ -33,8 +44,9 @@ export default async function handler(req, res) {
   const rule = allowedPath(path);
 
   if (credential !== 'operator') return json(res, 403, { error: 'This portal route allows operator actions only.' });
-  if (!['POST', 'PATCH', 'PUT', 'DELETE'].includes(method)) return json(res, 405, { error: 'Unsupported action method.' });
   if (!rule) return json(res, 403, { error: 'This gateway action is not allowlisted for the portal.' });
+  const allowedMethods = rule.methods || ['POST', 'PATCH', 'PUT', 'DELETE'];
+  if (!allowedMethods.includes(method)) return json(res, 405, { error: 'Unsupported action method.' });
 
   const minRole = rule.developerAllowed ? 'developer' : 'operator';
   const session = requirePermission(req, rule.permission, minRole);
@@ -47,25 +59,29 @@ export default async function handler(req, res) {
     return json(res, 400, { error: 'A clear reason is required for this admin action.' });
   }
 
-  const body = {
-    ...(payload.body || {}),
-    actor: {
-      email: session.claims.email,
-      role: session.claims.role,
-      name: session.claims.name,
-    },
-  };
+  const body = method === 'GET'
+    ? undefined
+    : {
+        ...(payload.body || {}),
+        actor: {
+          email: session.claims.email,
+          role: session.claims.role,
+          name: session.claims.name,
+        },
+      };
 
   try {
-    await writePortalAuditEvent(req, {
-      action: `portal.gateway.${method.toLowerCase()}`,
-      target: path,
-      environment,
-      metadata: {
-        permission: rule.permission,
-        reason: payload.reason || payload.body?.reason || payload.body?.rotationReason || undefined,
-      },
-    });
+    if (method !== 'GET') {
+      await writePortalAuditEvent(req, {
+        action: `portal.gateway.${method.toLowerCase()}`,
+        target: path,
+        environment,
+        metadata: {
+          permission: rule.permission,
+          reason: payload.reason || payload.body?.reason || payload.body?.rotationReason || undefined,
+        },
+      });
+    }
     const { response, data } = await gatewayFetch({ environment, path, method, credential: 'operator', body });
     return json(res, response.status, data);
   } catch (error) {

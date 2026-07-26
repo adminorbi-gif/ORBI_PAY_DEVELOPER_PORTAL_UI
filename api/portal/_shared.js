@@ -60,7 +60,8 @@ async function ensurePortalSchema() {
   const pool = getPortalPool();
   if (!pool) return false;
   if (portalSchemaReady) return true;
-  await pool.query(`
+  try {
+    await pool.query(`
     create table if not exists public.orbi_portal_users (
       user_id text primary key,
       email text not null unique,
@@ -91,8 +92,17 @@ async function ensurePortalSchema() {
       created_at timestamptz not null default now()
     );
   `);
-  portalSchemaReady = true;
-  return true;
+    portalSchemaReady = true;
+    return true;
+  } catch (error) {
+    console.warn(JSON.stringify({
+      level: 'warn',
+      service: 'orbi-pay-developer-portal',
+      message: 'portal.schema_unavailable',
+      error: error instanceof Error ? error.message : 'Portal schema setup failed.',
+    }));
+    return false;
+  }
 }
 
 export function json(res, status, body) {
@@ -249,10 +259,20 @@ export async function findPortalAccountAsync(email) {
   const normalized = String(email || '').trim().toLowerCase();
   const pool = getPortalPool();
   if (pool) {
-    await ensurePortalSchema();
-    const result = await pool.query('select * from public.orbi_portal_users where lower(email) = lower($1) and enabled = true limit 1', [normalized]);
-    const rowAccount = accountFromRow(result.rows[0]);
-    if (rowAccount) return rowAccount;
+    try {
+      if (await ensurePortalSchema()) {
+        const result = await pool.query('select * from public.orbi_portal_users where lower(email) = lower($1) and enabled = true limit 1', [normalized]);
+        const rowAccount = accountFromRow(result.rows[0]);
+        if (rowAccount) return rowAccount;
+      }
+    } catch (error) {
+      console.warn(JSON.stringify({
+        level: 'warn',
+        service: 'orbi-pay-developer-portal',
+        message: 'portal.account_lookup_fell_back_to_bootstrap',
+        error: error instanceof Error ? error.message : 'Portal account lookup failed.',
+      }));
+    }
   }
   return findPortalAccount(normalized);
 }
@@ -262,9 +282,14 @@ export async function listPortalUsers(req) {
   if (!session.ok) return session;
   const pool = getPortalPool();
   if (!pool) return { ok: true, data: readAccounts().map(publicPortalUser) };
-  await ensurePortalSchema();
-  const result = await pool.query('select * from public.orbi_portal_users order by created_at desc');
-  return { ok: true, data: result.rows.map(accountFromRow).map(publicPortalUser) };
+  try {
+    if (!(await ensurePortalSchema())) return { ok: true, data: readAccounts().map(publicPortalUser) };
+    const result = await pool.query('select * from public.orbi_portal_users order by created_at desc');
+    const users = result.rows.map(accountFromRow).map(publicPortalUser);
+    return { ok: true, data: users.length ? users : readAccounts().map(publicPortalUser) };
+  } catch (error) {
+    return { ok: false, status: 502, error: error instanceof Error ? error.message : 'Portal users are unavailable.' };
+  }
 }
 
 export async function createPortalUser(req, input) {
@@ -272,7 +297,7 @@ export async function createPortalUser(req, input) {
   if (!session.ok) return session;
   const pool = getPortalPool();
   if (!pool) return { ok: false, status: 503, error: 'Portal database is required to create users.' };
-  await ensurePortalSchema();
+  if (!(await ensurePortalSchema())) return { ok: false, status: 503, error: 'Portal database is unavailable.' };
   const password = String(input.password || '').trim();
   if (password.length < 12) return { ok: false, status: 400, error: 'Password must contain at least 12 characters.' };
   const role = ['developer', 'operator', 'admin'].includes(String(input.role)) ? String(input.role) : 'developer';
@@ -326,7 +351,7 @@ export async function updatePortalUser(req, userId, input) {
   if (!session.ok) return session;
   const pool = getPortalPool();
   if (!pool) return { ok: false, status: 503, error: 'Portal database is required to update users.' };
-  await ensurePortalSchema();
+  if (!(await ensurePortalSchema())) return { ok: false, status: 503, error: 'Portal database is unavailable.' };
   const current = await pool.query('select * from public.orbi_portal_users where user_id = $1 limit 1', [userId]);
   if (!current.rows[0]) return { ok: false, status: 404, error: 'Portal user not found.' };
   const existing = accountFromRow(current.rows[0]);
@@ -473,8 +498,9 @@ export async function writePortalAuditEvent(req, { action, target, environment, 
   };
   const pool = getPortalPool();
   if (pool) {
-    await ensurePortalSchema();
-    await pool.query(
+    try {
+      if (await ensurePortalSchema()) {
+        await pool.query(
       `insert into public.orbi_portal_audit_events (
         event_id, actor_email, actor_role, action, target, environment,
         ip_hash, user_agent_hash, metadata
@@ -490,7 +516,16 @@ export async function writePortalAuditEvent(req, { action, target, environment, 
         event.userAgentHash || null,
         event.metadata || {},
       ],
-    );
+        );
+      }
+    } catch (error) {
+      console.warn(JSON.stringify({
+        level: 'warn',
+        service: 'orbi-pay-developer-portal',
+        message: 'portal.audit_persist_failed',
+        error: error instanceof Error ? error.message : 'Portal audit persist failed.',
+      }));
+    }
   }
   console.info(JSON.stringify({ level: 'info', service: 'orbi-pay-developer-portal', message: 'portal.audit_event', ...event }));
   return event;
@@ -501,21 +536,25 @@ export async function listPortalAuditEvents(req) {
   if (!session.ok) return session;
   const pool = getPortalPool();
   if (!pool) return { ok: true, data: [] };
-  await ensurePortalSchema();
-  const result = await pool.query('select * from public.orbi_portal_audit_events order by created_at desc limit 200');
-  return {
-    ok: true,
-    data: result.rows.map((row) => ({
-      eventId: row.event_id,
-      actorEmail: row.actor_email,
-      actorRole: row.actor_role,
-      action: row.action,
-      target: row.target,
-      environment: row.environment,
-      createdAt: row.created_at,
-      metadata: row.metadata || {},
-    })),
-  };
+  try {
+    if (!(await ensurePortalSchema())) return { ok: true, data: [] };
+    const result = await pool.query('select * from public.orbi_portal_audit_events order by created_at desc limit 200');
+    return {
+      ok: true,
+      data: result.rows.map((row) => ({
+        eventId: row.event_id,
+        actorEmail: row.actor_email,
+        actorRole: row.actor_role,
+        action: row.action,
+        target: row.target,
+        environment: row.environment,
+        createdAt: row.created_at,
+        metadata: row.metadata || {},
+      })),
+    };
+  } catch (error) {
+    return { ok: false, status: 502, error: error instanceof Error ? error.message : 'Portal audit is unavailable.' };
+  }
 }
 
 export async function readJsonBody(req) {
