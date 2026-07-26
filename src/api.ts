@@ -15,11 +15,17 @@ export type PortalConfig = {
 };
 
 export type PortalUser = {
+  userId?: string;
   email: string;
   name: string;
   role: 'developer' | 'operator' | 'admin';
+  permissions?: string[];
   liveAccess?: boolean;
   serviceCodes?: string[];
+  mfaRequired?: boolean;
+  enabled?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type PortalSession = {
@@ -90,6 +96,8 @@ export type PortalSnapshot = {
   sandboxAccounts: SandboxAccount[];
   integrationHealth?: unknown;
   serviceProfile?: Record<string, unknown>;
+  portalUsers?: PortalUser[];
+  portalAudit?: Array<Record<string, unknown>>;
 };
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');
@@ -128,11 +136,15 @@ export function clearPortalSession() {
 }
 
 export async function loginPortal(config: PortalConfig, email: string, password: string): Promise<GatewayResult<PortalSession>> {
+  return loginPortalWithOtp(config, email, password);
+}
+
+export async function loginPortalWithOtp(config: PortalConfig, email: string, password: string, otp?: string): Promise<GatewayResult<PortalSession>> {
   try {
     const response = await fetch(`${config.bffBaseUrl}/auth/login`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, otp }),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
@@ -188,7 +200,7 @@ export async function gatewayRequest<T>(
   config: PortalConfig,
   path: string,
   credential: CredentialMode = 'none',
-  init: RequestInit = {},
+  init: RequestInit & { portalConfirmationAccepted?: boolean; portalReason?: string } = {},
 ): Promise<GatewayResult<T>> {
   if (credential !== 'none' && shouldUseBff(config)) {
     try {
@@ -205,6 +217,8 @@ export async function gatewayRequest<T>(
           path,
           method: init.method || 'GET',
           body: init.body ? JSON.parse(String(init.body)) : undefined,
+          confirmationAccepted: Boolean(init.portalConfirmationAccepted),
+          reason: init.portalReason,
         }),
       });
       const body = await response.json().catch(() => null);

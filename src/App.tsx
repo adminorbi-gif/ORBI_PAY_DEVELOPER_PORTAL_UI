@@ -18,13 +18,14 @@ import {
   fetchPortalSnapshot,
   gatewayRequest,
   getPortalConfig,
-  loginPortal,
+  loginPortalWithOtp,
   logoutPortal,
   readStoredPortalSession,
   validatePortalSession,
   type DeveloperEvent,
   type PortalConfig,
   type PortalSession,
+  type PortalUser,
   type PortalSnapshot,
   type SandboxAccount,
   type ServiceApplication,
@@ -41,6 +42,7 @@ const titleFor: Record<SectionId, string> = {
   access: 'Get Access',
   sandbox: 'Sandbox',
   keys: 'Keys & Secrets',
+  team: 'Team Access',
   scopes: 'Permissions',
   webhooks: 'Payment Updates',
   health: 'System Checks',
@@ -285,7 +287,7 @@ function isSectionVisibleForRole(section: SectionId, role: PortalRole) {
   if (role === 'public_developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime'].includes(section);
   if (role === 'developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime', 'scopes', 'webhooks', 'health'].includes(section);
   if (role === 'operator') return ['overview', 'services', 'access', 'keys', 'scopes', 'webhooks', 'health', 'events'].includes(section);
-  return ['overview', 'services', 'access', 'health', 'webhooks', 'events', 'runtime'].includes(section);
+  return ['overview', 'services', 'access', 'keys', 'team', 'scopes', 'webhooks', 'health', 'events', 'runtime'].includes(section);
 }
 
 function roleCanSwitchEnvironment(role: PortalRole, snapshot?: PortalSnapshot) {
@@ -449,6 +451,7 @@ function SectionRenderer({
   if (section === 'access') return <AccessRequests config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'sandbox') return <SandboxSetup config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'keys') return <KeysAndSecrets config={config} state={portalState} refresh={refresh} openKeyModal={openKeyModal} />;
+  if (section === 'team') return <TeamAccess config={config} state={portalState} refresh={refresh} />;
   if (section === 'scopes') return <ScopesAndConsent config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'webhooks') return <Webhooks config={config} state={portalState} refresh={refresh} />;
   if (section === 'health') return <Health state={portalState} />;
@@ -788,12 +791,17 @@ function ApplicationApproval({ config, application, refresh }: { config: PortalC
   const canApprove = applicationId && String(application.status || '').toLowerCase() === 'pending_review';
 
   const approve = async () => {
+    const reason = `Approve developer application ${applicationId}.`;
+    if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setWorking(true);
     const result = await gatewayRequest(config, `/v1/developer/service-applications/${encodeURIComponent(applicationId)}/approve`, 'operator', {
       method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason,
       body: JSON.stringify({
         serviceCode: String(application.displayName || application.legalName || 'service'),
         initialStatus: config.environment === 'live' ? 'draft' : 'active',
+        reason,
       }),
     });
     setMessage(result.ok ? 'Approved' : result.error);
@@ -826,13 +834,17 @@ function ServiceStatusActions({
   const [working, setWorking] = useState(false);
 
   const updateStatus = async (nextStatus: 'active' | 'suspended' | 'archived') => {
+    const reason = `Change ${serviceCode} status to ${nextStatus}.`;
+    if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setWorking(true);
     const result = await gatewayRequest(config, `/v1/developer/services/${encodeURIComponent(serviceCode)}/status`, 'operator', {
       method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason,
       body: JSON.stringify({
         status: nextStatus,
-        reason: `Operator changed service status to ${nextStatus} from Developer Portal.`,
-        decidedBy: 'operator@orbifinancial.com',
+        reason,
+        decidedBy: 'portal-session',
       }),
     });
     setMessage(result.ok ? `Service ${nextStatus}.` : result.error);
@@ -862,8 +874,15 @@ function SandboxSetup({ config, state, refresh, role }: { config: PortalConfig; 
   const accounts = state.snapshot?.sandboxAccounts || [];
 
   const resetSandbox = async () => {
+    const reason = 'Reset sandbox simulator test accounts.';
+    if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setRunning(true);
-    const result = await gatewayRequest(config, '/v1/developer/sandbox-simulator/reset', 'operator', { method: 'POST' });
+    const result = await gatewayRequest(config, '/v1/developer/sandbox-simulator/reset', 'operator', {
+      method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason,
+      body: JSON.stringify({ reason }),
+    });
     setActionMessage(result.ok ? 'Sandbox simulator reset completed.' : result.error);
     setRunning(false);
     if (result.ok) refresh();
@@ -1022,14 +1041,122 @@ function KeysAndSecrets({ config, state, refresh, openKeyModal }: { config: Port
   );
 }
 
+function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: PortalState; refresh: () => void }) {
+  const users = state.snapshot?.portalUsers || [];
+  const audit = state.snapshot?.portalAudit || [];
+  const [email, setEmail] = useState('');
+  const [name, setName] = useState('');
+  const [role, setRole] = useState<'developer' | 'operator' | 'admin'>('developer');
+  const [password, setPassword] = useState('');
+  const [mfaRequired, setMfaRequired] = useState(true);
+  const [liveAccess, setLiveAccess] = useState(false);
+  const [message, setMessage] = useState<string>();
+  const [working, setWorking] = useState(false);
+
+  const createUser = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    try {
+      const response = await fetch(`${config.bffBaseUrl}/users`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
+        },
+        body: JSON.stringify({ email, name, role, password, mfaRequired, liveAccess }),
+      });
+      const body = await response.json().catch(() => null);
+      setMessage(response.ok ? 'Portal account created.' : String(body?.error || `Request failed with HTTP ${response.status}`));
+      if (response.ok) {
+        setEmail('');
+        setName('');
+        setPassword('');
+        refresh();
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to create portal account.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  return (
+    <div className="stack">
+      <div className="panel wide-panel">
+        <PanelHeader title="Portal Team Access" />
+        <p className="security-note">
+          Create controlled developer, operator, and admin access. Store passwords securely and enable MFA for production users.
+        </p>
+        <div className="form-grid">
+          <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Jane Operator" /></label>
+          <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="jane@company.com" /></label>
+          <label>
+            Role
+            <select value={role} onChange={(event) => setRole(event.target.value as 'developer' | 'operator' | 'admin')}>
+              <option value="developer">Developer</option>
+              <option value="operator">Operator</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Minimum 12 characters" /></label>
+        </div>
+        <div className="toggle-row">
+          <label><input type="checkbox" checked={mfaRequired} onChange={(event) => setMfaRequired(event.target.checked)} /> Require MFA</label>
+          <label><input type="checkbox" checked={liveAccess} onChange={(event) => setLiveAccess(event.target.checked)} /> Live access</label>
+        </div>
+        <button className="button-primary inline-link" disabled={working || !email || !password || !name} onClick={createUser}>
+          {working ? 'Creating' : 'Create account'}
+        </button>
+        {message && <div className="inline-message">{message}</div>}
+      </div>
+
+      <div className="panel wide-panel">
+        <PanelHeader title="Active Portal Users" />
+        <DataTable
+          columns={['Name', 'Email', 'Role', 'MFA', 'Live', 'Status']}
+          rows={users.map((user) => [
+            String(user.name || '-'),
+            String(user.email || '-'),
+            <StatusPill tone={user.role === 'admin' ? 'danger' : user.role === 'operator' ? 'warning' : 'info'}>{String(user.role || 'developer')}</StatusPill>,
+            user.mfaRequired ? 'Required' : 'Not required',
+            user.liveAccess ? 'Enabled' : 'Sandbox only',
+            user.enabled === false ? 'Disabled' : 'Enabled',
+          ])}
+          empty="No portal users returned. Configure ORBI_PORTAL_DATABASE_URL to manage team access from the portal."
+        />
+      </div>
+
+      <div className="panel wide-panel">
+        <PanelHeader title="Admin Audit Trail" />
+        <DataTable
+          columns={['Time', 'Actor', 'Action', 'Target', 'Environment']}
+          rows={audit.map((event) => [
+            event.createdAt ? new Date(String(event.createdAt)).toLocaleString() : '-',
+            String(event.actorEmail || '-'),
+            String(event.action || '-'),
+            String(event.target || '-'),
+            String(event.environment || '-'),
+          ])}
+          empty="No admin audit events yet."
+        />
+      </div>
+    </div>
+  );
+}
+
 function SecretActions({ config, serviceCode, refresh }: { config: PortalConfig; serviceCode: string; refresh: () => void }) {
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
 
   const call = async (path: string, body: Record<string, unknown>, success: string) => {
+    const reason = String(body.reason || body.rotationReason || 'Controlled key action from Developer Portal.');
+    if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setWorking(true);
     const result = await gatewayRequest(config, path, 'operator', {
       method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason,
       body: JSON.stringify(body),
     });
     setMessage(result.ok ? success : result.error);
@@ -1133,10 +1260,14 @@ function Webhooks({ config, state, refresh }: { config: PortalConfig; state: Por
   const deliveries = state.snapshot?.webhookDeliveries || [];
 
   const replay = async (deliveryId: string) => {
+    const reason = `Replay webhook delivery ${deliveryId}.`;
+    if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setReplaying(deliveryId);
     const result = await gatewayRequest(config, `/v1/developer/webhook-deliveries/${encodeURIComponent(deliveryId)}/replay`, 'operator', {
       method: 'POST',
-      body: JSON.stringify({ requestId: `portal-replay-${deliveryId}-${Date.now()}` }),
+      portalConfirmationAccepted: true,
+      portalReason: reason,
+      body: JSON.stringify({ requestId: `portal-replay-${deliveryId}-${Date.now()}`, reason }),
     });
     setMessage(result.ok ? `Replay queued for ${deliveryId}.` : result.error);
     setReplaying(undefined);
@@ -1937,13 +2068,14 @@ function AuthModal({
 }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
 
   const submit = async () => {
     setWorking(true);
     setMessage(undefined);
-    const result = await loginPortal(config, email, password);
+    const result = await loginPortalWithOtp(config, email, password, otp);
     setWorking(false);
     if (!result.ok) {
       setMessage(result.error);
@@ -1978,6 +2110,16 @@ function AuthModal({
             onKeyDown={(event) => {
               if (event.key === 'Enter') void submit();
             }}
+          />
+        </label>
+        <label>
+          Authenticator code
+          <input
+            value={otp}
+            onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+            placeholder="Optional unless MFA is enabled"
+            inputMode="numeric"
+            autoComplete="one-time-code"
           />
         </label>
         <button className="button-primary full" onClick={submit} disabled={working || !email.trim() || !password}>
@@ -2032,13 +2174,17 @@ function PortalModal({
       setMessage('Enter service code first.');
       return;
     }
+    const reason = `Issue ${config.environment} API key for ${serviceCode.trim()}.`;
+    if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setWorking(true);
     const result = await gatewayRequest(config, `/v1/developer/services/${encodeURIComponent(serviceCode.trim())}/api-keys/issue`, 'operator', {
       method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason,
       body: JSON.stringify({
         environment: config.environment,
-        requestedBy: 'portal@orbifinancial.com',
-        reason: `Issue ${config.environment} API key from Developer Portal.`,
+        requestedBy: 'portal-session',
+        reason,
       }),
     });
     setMessage(result.ok ? 'API key issued. Copy the one-time secret from the response in secure operator flow.' : result.error);

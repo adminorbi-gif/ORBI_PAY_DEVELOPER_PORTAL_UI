@@ -31,6 +31,7 @@ ORBI_PAY_GATEWAY_SANDBOX_BASE_URL=https://sandbox-pay.orbifinancial.com
 ORBI_PAY_GATEWAY_LIVE_BASE_URL=https://pay.orbifinancial.com
 ORBI_PORTAL_SANDBOX_OPERATOR_KEY=<server-only-sandbox-operator-key>
 ORBI_PORTAL_LIVE_OPERATOR_KEY=<server-only-live-operator-key>
+ORBI_PORTAL_DATABASE_URL=<postgres-url-for-portal-users-and-audit>
 ORBI_PORTAL_AUTH_SECRET=<server-only-session-signing-secret>
 ORBI_PORTAL_SESSION_TTL_SECONDS=28800
 ORBI_PORTAL_ADMIN_EMAIL=<admin-email>
@@ -39,6 +40,8 @@ ORBI_PORTAL_ADMIN_ROLE=admin
 ORBI_PORTAL_ADMIN_PASSWORD_SALT=<password-salt>
 ORBI_PORTAL_ADMIN_PASSWORD_HASH=<pbkdf2-sha256-base64url-hash>
 ORBI_PORTAL_ADMIN_PASSWORD_ITERATIONS=210000
+ORBI_PORTAL_ADMIN_TOTP_SECRET=<base32-authenticator-secret>
+ORBI_PORTAL_ADMIN_MFA_REQUIRED=true
 ```
 
 Role control must come from login/session claims:
@@ -53,6 +56,11 @@ admin            -> operator access plus risk, account, and audit oversight
 Roles now come from `/api/portal/auth/login` session claims. The browser never
 receives operator keys. Operator actions are proxied through `/api/portal/gateway`
 and require a signed BFF session token issued after login.
+
+For production, set `ORBI_PORTAL_DATABASE_URL`. The BFF creates
+`orbi_portal_users` and `orbi_portal_audit_events` if they do not exist. Without
+the database URL, the portal can only use the bootstrap admin from environment
+variables and cannot persist team users or admin audit events.
 
 To generate a password hash for a bootstrap admin:
 

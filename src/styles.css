@@ -46,6 +46,31 @@ select {
   font: inherit;
 }
 
+input[type='checkbox'] {
+  width: auto;
+  padding: 0;
+  accent-color: var(--brand);
+}
+
+.toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 10px 0 18px;
+}
+
+.toggle-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 13px;
+  color: #0f172a;
+  background: #f8fcfa;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
 button {
   cursor: pointer;
 }

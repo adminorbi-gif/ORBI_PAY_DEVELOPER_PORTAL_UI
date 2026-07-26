@@ -1,4 +1,4 @@
-import { environmentConfig, gatewayFetch, json, publicArray, readEnvironment, requirePortalSession } from './_shared.js';
+import { environmentConfig, gatewayFetch, json, listPortalAuditEvents, listPortalUsers, publicArray, readEnvironment, requirePortalSession } from './_shared.js';
 
 const operatorPaths = [
   ['/v1/developer/services', []],
@@ -84,6 +84,11 @@ export default async function handler(req, res) {
     errors.push({ name: 'session', error: session.error || 'Sign in to continue.' });
   }
 
+  const adminUsers = accessLevel === 'admin' && session.ok ? await listPortalUsers(req) : { ok: true, data: [] };
+  const adminAudit = accessLevel === 'admin' && session.ok ? await listPortalAuditEvents(req) : { ok: true, data: [] };
+  if (!adminUsers.ok) errors.push({ name: 'portalUsers', error: adminUsers.error });
+  if (!adminAudit.ok) errors.push({ name: 'portalAudit', error: adminAudit.error });
+
   return json(res, 200, {
     environment,
     gatewayBaseUrl: env.publicBaseUrl,
@@ -101,6 +106,8 @@ export default async function handler(req, res) {
       sandboxAccounts: arrayFrom(operatorResults[8].data, 'accounts'),
       integrationHealth: operatorResults[9].data,
       serviceProfile: undefined,
+      portalUsers: adminUsers.ok ? adminUsers.data : [],
+      portalAudit: adminAudit.ok ? adminAudit.data : [],
     },
     errors,
   });

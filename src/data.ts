@@ -6,6 +6,7 @@ import {
   Gauge,
   HeartPulse,
   KeyRound,
+  UserCog,
   Network,
   ShieldCheck,
   Terminal,
@@ -21,6 +22,7 @@ export type SectionId =
   | 'access'
   | 'sandbox'
   | 'keys'
+  | 'team'
   | 'scopes'
   | 'webhooks'
   | 'health'
@@ -40,6 +42,7 @@ export const navItems: NavItem[] = [
   { id: 'access', label: 'Get Access', icon: FileCheck2 },
   { id: 'sandbox', label: 'Sandbox', icon: Terminal },
   { id: 'keys', label: 'Keys & Secrets', icon: KeyRound },
+  { id: 'team', label: 'Team Access', icon: UserCog },
   { id: 'scopes', label: 'Permissions', icon: ShieldCheck },
   { id: 'webhooks', label: 'Payment Updates', icon: Webhook },
   { id: 'health', label: 'System Checks', icon: HeartPulse },
