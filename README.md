@@ -53,6 +53,15 @@ operator keys. Operator actions are proxied through `/api/portal/gateway`, but
 Pay Gateway still performs permission checks, confirmation checks, and audit
 persistence before any operational command runs.
 
+Backend-driven rule:
+
+```text
+The browser calls only /api/portal/*.
+The Vercel portal API only proxies to Pay Gateway with server-only operator keys.
+Pay Gateway owns login, sessions, role checks, MFA, users, audit, snapshots, and admin actions.
+If the proxy is unavailable, the portal fails closed instead of calling gateway runtime endpoints directly.
+```
+
 MFA QR setup is generated inside the browser from the server-provided
 `otpauth://` URI. The portal does not call third-party QR services.
 
