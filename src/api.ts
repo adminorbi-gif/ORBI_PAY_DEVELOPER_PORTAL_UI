@@ -14,6 +14,20 @@ export type PortalConfig = {
   sessionToken?: string;
 };
 
+export type PortalUser = {
+  email: string;
+  name: string;
+  role: 'developer' | 'operator' | 'admin';
+  liveAccess?: boolean;
+  serviceCodes?: string[];
+};
+
+export type PortalSession = {
+  token: string;
+  user: PortalUser;
+  expiresAt?: string;
+};
+
 export type ServiceRecord = Record<string, unknown> & {
   serviceCode?: string;
   code?: string;
@@ -84,14 +98,78 @@ export const getPortalConfig = (environment: PortalEnvironment): PortalConfig =>
   baseUrl: normalizeBaseUrl(import.meta.env.VITE_ORBI_PAY_GATEWAY_BASE_URL || 'https://sandbox-pay.orbifinancial.com'),
   bffBaseUrl: normalizeBaseUrl(import.meta.env.VITE_ORBI_PORTAL_BFF_BASE_URL || '/api/portal'),
   environment,
-  sessionToken:
-    window.localStorage.getItem('orbi_portal_session_token') ||
-    import.meta.env.VITE_ORBI_PORTAL_SESSION_TOKEN ||
-    undefined,
+  sessionToken: window.localStorage.getItem('orbi_portal_session_token') || undefined,
 });
 
 function shouldUseBff(config: PortalConfig) {
   return Boolean(config.bffBaseUrl);
+}
+
+export function readStoredPortalSession(): PortalSession | undefined {
+  try {
+    const raw = window.localStorage.getItem('orbi_portal_session');
+    if (!raw) return undefined;
+    const parsed = JSON.parse(raw) as PortalSession;
+    if (!parsed?.token || !parsed?.user?.role) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+export function storePortalSession(session: PortalSession) {
+  window.localStorage.setItem('orbi_portal_session', JSON.stringify(session));
+  window.localStorage.setItem('orbi_portal_session_token', session.token);
+}
+
+export function clearPortalSession() {
+  window.localStorage.removeItem('orbi_portal_session');
+  window.localStorage.removeItem('orbi_portal_session_token');
+}
+
+export async function loginPortal(config: PortalConfig, email: string, password: string): Promise<GatewayResult<PortalSession>> {
+  try {
+    const response = await fetch(`${config.bffBaseUrl}/auth/login`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `Login failed with HTTP ${response.status}`), detail: body };
+    }
+    const session = body as PortalSession;
+    storePortalSession(session);
+    return { ok: true, data: session };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Login failed.', detail: error };
+  }
+}
+
+export async function validatePortalSession(config: PortalConfig): Promise<GatewayResult<Omit<PortalSession, 'token'>>> {
+  if (!config.sessionToken) return { ok: false, status: 401, error: 'No active portal session.' };
+  try {
+    const response = await fetch(`${config.bffBaseUrl}/auth/session`, {
+      headers: { Accept: 'application/json', Authorization: `Bearer ${config.sessionToken}` },
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `Session check failed with HTTP ${response.status}`), detail: body };
+    }
+    return { ok: true, data: body as Omit<PortalSession, 'token'> };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Session check failed.', detail: error };
+  }
+}
+
+export async function logoutPortal(config: PortalConfig) {
+  if (config.sessionToken) {
+    await fetch(`${config.bffBaseUrl}/auth/logout`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', Authorization: `Bearer ${config.sessionToken}` },
+    }).catch(() => undefined);
+  }
+  clearPortalSession();
 }
 
 const unwrapGatewayEnvelope = <T>(body: unknown): T => {

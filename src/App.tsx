@@ -18,8 +18,13 @@ import {
   fetchPortalSnapshot,
   gatewayRequest,
   getPortalConfig,
+  loginPortal,
+  logoutPortal,
+  readStoredPortalSession,
+  validatePortalSession,
   type DeveloperEvent,
   type PortalConfig,
+  type PortalSession,
   type PortalSnapshot,
   type SandboxAccount,
   type ServiceApplication,
@@ -86,7 +91,8 @@ const money = new Intl.NumberFormat('en-TZ', {
 
 export function App() {
   const [section, setSection] = useState<SectionId>('overview');
-  const [role] = useState<PortalRole>(readPortalRole());
+  const [session, setSession] = useState<PortalSession | undefined>(() => readStoredPortalSession());
+  const role = session?.user.role || 'public_developer';
   const currentRole = roleMeta[role];
   const [environment, setEnvironment] = useState<Environment>(
     roleCanSwitchEnvironment(role)
@@ -95,9 +101,10 @@ export function App() {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<'service' | 'key' | null>(null);
+  const [authOpen, setAuthOpen] = useState(false);
   const [portalState, setPortalState] = useState<PortalState>({ loading: true, errors: [] });
 
-  const config = useMemo(() => getPortalConfig(environment), [environment]);
+  const config = useMemo(() => ({ ...getPortalConfig(environment), sessionToken: session?.token }), [environment, session?.token]);
 
   const loadPortal = async () => {
     setPortalState((current) => ({ ...current, loading: true }));
@@ -109,9 +116,35 @@ export function App() {
     void loadPortal();
   }, [config.baseUrl, config.bffBaseUrl, config.environment, config.sessionToken]);
 
+  useEffect(() => {
+    if (!session?.token) return;
+    let cancelled = false;
+    const validate = async () => {
+      const result = await validatePortalSession(config);
+      if (cancelled) return;
+      if (!result.ok) {
+        setSession(undefined);
+        setEnvironment('sandbox');
+        return;
+      }
+      setSession((current) => (current ? { ...current, user: result.data.user, expiresAt: result.data.expiresAt } : current));
+    };
+    void validate();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const navigate = (next: SectionId) => {
     setSection(next);
     setSidebarOpen(false);
+  };
+
+  const signOut = async () => {
+    await logoutPortal(config);
+    setSession(undefined);
+    setEnvironment('sandbox');
+    setSection('overview');
   };
 
   return (
@@ -150,10 +183,15 @@ export function App() {
         <div className="sidebar-user">
           <div className="avatar">{currentRole.initials}</div>
           <div>
-            <strong>{currentRole.label}</strong>
+            <strong>{session?.user.name || currentRole.label}</strong>
             <small>{currentRole.subtitle}</small>
             <span>{config.baseUrl.replace(/^https?:\/\//, '')}</span>
           </div>
+          {session ? (
+            <button className="mini-link" onClick={signOut}>Logout</button>
+          ) : (
+            <button className="mini-link" onClick={() => setAuthOpen(true)}>Login</button>
+          )}
         </div>
       </aside>
 
@@ -174,6 +212,11 @@ export function App() {
             <button className="primary-action" onClick={() => setModal('service')}>
               <Plus size={18} />
               <span>New Integration</span>
+            </button>
+          ) : role === 'public_developer' ? (
+            <button className="primary-action" onClick={() => setAuthOpen(true)}>
+              <ArrowRight size={18} />
+              <span>Sign in</span>
             </button>
           ) : (
             <button className="primary-action" onClick={() => navigate('sandbox')}>
@@ -209,14 +252,19 @@ export function App() {
       </main>
 
       {modal && <PortalModal type={modal} config={config} onClose={() => setModal(null)} refresh={loadPortal} />}
+      {authOpen && (
+        <AuthModal
+          config={config}
+          onClose={() => setAuthOpen(false)}
+          onSignedIn={(nextSession) => {
+            setSession(nextSession);
+            setAuthOpen(false);
+            setSection(roleCanManageServices(nextSession.user.role) ? 'overview' : 'sandbox');
+          }}
+        />
+      )}
     </div>
   );
-}
-
-function readPortalRole(): PortalRole {
-  const value = String(import.meta.env.VITE_ORBI_PORTAL_ACTOR_ROLE || 'public_developer').toLowerCase();
-  if (['developer', 'operator', 'admin', 'public_developer'].includes(value)) return value as PortalRole;
-  return 'public_developer';
 }
 
 function RoleBadge({ role }: { role: PortalRole }) {
@@ -1875,6 +1923,69 @@ function Copyable({ value }: { value: string }) {
       <Copy size={14} />
       <span>{value}</span>
     </button>
+  );
+}
+
+function AuthModal({
+  config,
+  onClose,
+  onSignedIn,
+}: {
+  config: PortalConfig;
+  onClose: () => void;
+  onSignedIn: (session: PortalSession) => void;
+}) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [message, setMessage] = useState<string>();
+  const [working, setWorking] = useState(false);
+
+  const submit = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    const result = await loginPortal(config, email, password);
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    onSignedIn(result.data);
+  };
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true">
+      <div className="modal-card auth-card">
+        <button className="icon-button modal-close" onClick={onClose} aria-label="Close login">
+          <X size={20} />
+        </button>
+        <p className="eyebrow">Secure access</p>
+        <h2>Sign in to ORBI Pay</h2>
+        <p className="modal-copy">
+          Use your approved developer, operator, or admin account. Public visitors can continue reading docs without signing in.
+        </p>
+        <label>
+          Email
+          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@orbifinancial.com" autoComplete="email" />
+        </label>
+        <label>
+          Password
+          <input
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            placeholder="Your portal password"
+            type="password"
+            autoComplete="current-password"
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void submit();
+            }}
+          />
+        </label>
+        <button className="button-primary full" onClick={submit} disabled={working || !email.trim() || !password}>
+          {working ? 'Signing in' : 'Sign in'}
+        </button>
+        {message && <div className="inline-message danger">{message}</div>}
+      </div>
+    </div>
   );
 }
 

@@ -209,6 +209,10 @@ a {
   border-radius: var(--radius-lg);
 }
 
+.sidebar-user > div:nth-child(2) {
+  flex: 1;
+}
+
 .sidebar-user span {
   display: block;
   color: var(--muted);
@@ -223,6 +227,16 @@ a {
   font-weight: 900;
   letter-spacing: 0.06em;
   text-transform: uppercase;
+}
+
+.mini-link {
+  border: 0;
+  padding: 8px 10px;
+  color: var(--brand);
+  background: #ecfdf5;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .role-badge {
@@ -407,6 +421,12 @@ a {
 .connection-banner.danger {
   border-color: #fecaca;
   background: #fef2f2;
+}
+
+.inline-message.danger {
+  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 
 .connection-banner span,
@@ -1280,6 +1300,10 @@ tr:last-child td {
   box-shadow: 0 40px 120px rgba(2, 6, 23, 0.28);
 }
 
+.auth-card {
+  width: min(520px, 100%);
+}
+
 .modal-close {
   position: absolute;
   top: 18px;
@@ -1296,6 +1320,7 @@ tr:last-child td {
 label {
   display: grid;
   gap: 7px;
+  margin-bottom: 14px;
   color: var(--muted);
   font-size: 13px;
   font-weight: 900;

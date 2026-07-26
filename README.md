@@ -18,8 +18,6 @@ Create `.env.local` from `.env.example`:
 VITE_ORBI_PAY_GATEWAY_BASE_URL=https://sandbox-pay.orbifinancial.com
 VITE_ORBI_PORTAL_BFF_BASE_URL=/api/portal
 VITE_ORBI_PORTAL_ENVIRONMENT=sandbox
-VITE_ORBI_PORTAL_ACTOR_ROLE=public_developer
-VITE_ORBI_PORTAL_SESSION_TOKEN=
 ```
 
 Production browser bundles must not expose operator keys, service keys, webhook
@@ -33,8 +31,14 @@ ORBI_PAY_GATEWAY_SANDBOX_BASE_URL=https://sandbox-pay.orbifinancial.com
 ORBI_PAY_GATEWAY_LIVE_BASE_URL=https://pay.orbifinancial.com
 ORBI_PORTAL_SANDBOX_OPERATOR_KEY=<server-only-sandbox-operator-key>
 ORBI_PORTAL_LIVE_OPERATOR_KEY=<server-only-live-operator-key>
-ORBI_PORTAL_BFF_SESSION_TOKEN=<temporary-staff-session-token>
-ORBI_PORTAL_BFF_SESSION_ROLE=operator
+ORBI_PORTAL_AUTH_SECRET=<server-only-session-signing-secret>
+ORBI_PORTAL_SESSION_TTL_SECONDS=28800
+ORBI_PORTAL_ADMIN_EMAIL=<admin-email>
+ORBI_PORTAL_ADMIN_NAME=ORBI Admin
+ORBI_PORTAL_ADMIN_ROLE=admin
+ORBI_PORTAL_ADMIN_PASSWORD_SALT=<password-salt>
+ORBI_PORTAL_ADMIN_PASSWORD_HASH=<pbkdf2-sha256-base64url-hash>
+ORBI_PORTAL_ADMIN_PASSWORD_ITERATIONS=210000
 ```
 
 Role control must come from login/session claims:
@@ -46,10 +50,15 @@ operator         -> service approval, scopes, keys, secrets, webhook replay
 admin            -> operator access plus risk, account, and audit oversight
 ```
 
-`VITE_ORBI_PORTAL_ACTOR_ROLE` is only a local adapter until Auth/OIDC session
-claims are connected. It is not an authorization boundary. Operator actions are
-proxied through `/api/portal/gateway` and require the server-side BFF session
-token.
+Roles now come from `/api/portal/auth/login` session claims. The browser never
+receives operator keys. Operator actions are proxied through `/api/portal/gateway`
+and require a signed BFF session token issued after login.
+
+To generate a password hash for a bootstrap admin:
+
+```bash
+node -e "const crypto=require('node:crypto');const p=process.argv[1];const salt=crypto.randomBytes(16).toString('base64url');const i=210000;const h=crypto.pbkdf2Sync(p,salt,i,32,'sha256').toString('base64url');console.log({salt,hash:h,iterations:i})" "replace-with-strong-password"
+```
 
 Public and registered developers do not get a Live environment switch. They use
 sandbox by default, then submit a production access request. ORBI operator/admin
