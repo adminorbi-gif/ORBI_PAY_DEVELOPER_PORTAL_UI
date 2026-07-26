@@ -46,7 +46,31 @@ let portalPool;
 let portalSchemaReady;
 
 function portalDatabaseUrl() {
-  return process.env.ORBI_PORTAL_DATABASE_URL || process.env.DATABASE_URL || '';
+  const value = process.env.ORBI_PORTAL_DATABASE_URL || process.env.DATABASE_URL || '';
+  if (!value) return '';
+  if (process.env.VERCEL) {
+    try {
+      const url = new URL(value);
+      const blockedHosts = new Set(['postgres', 'localhost', '127.0.0.1', '0.0.0.0']);
+      if (blockedHosts.has(url.hostname)) {
+        console.warn(JSON.stringify({
+          level: 'warn',
+          service: 'orbi-pay-developer-portal',
+          message: 'portal.database_url_unreachable_from_vercel',
+          hostname: url.hostname,
+        }));
+        return '';
+      }
+    } catch {
+      console.warn(JSON.stringify({
+        level: 'warn',
+        service: 'orbi-pay-developer-portal',
+        message: 'portal.database_url_invalid',
+      }));
+      return '';
+    }
+  }
+  return value;
 }
 
 function getPortalPool() {
