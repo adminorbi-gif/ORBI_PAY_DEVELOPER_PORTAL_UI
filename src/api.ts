@@ -103,8 +103,11 @@ export type PortalSnapshot = {
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');
 
+const publicGatewayBaseUrlFor = (environment: PortalEnvironment) =>
+  environment === 'live' ? 'https://pay.orbifinancial.com' : 'https://sandbox-pay.orbifinancial.com';
+
 export const getPortalConfig = (environment: PortalEnvironment): PortalConfig => ({
-  baseUrl: normalizeBaseUrl(import.meta.env.VITE_ORBI_PAY_GATEWAY_BASE_URL || 'https://sandbox-pay.orbifinancial.com'),
+  baseUrl: publicGatewayBaseUrlFor(environment),
   bffBaseUrl: normalizeBaseUrl(import.meta.env.VITE_ORBI_PORTAL_BFF_BASE_URL || '/api/portal'),
   environment,
   sessionToken: window.localStorage.getItem('orbi_portal_session_token') || undefined,

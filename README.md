@@ -15,7 +15,6 @@ npm run dev
 Create `.env.local` from `.env.example`:
 
 ```env
-VITE_ORBI_PAY_GATEWAY_BASE_URL=https://sandbox-pay.orbifinancial.com
 VITE_ORBI_PORTAL_BFF_BASE_URL=/api/portal
 VITE_ORBI_PORTAL_ENVIRONMENT=sandbox
 ```
@@ -23,7 +22,9 @@ VITE_ORBI_PORTAL_ENVIRONMENT=sandbox
 Production browser bundles must not expose operator keys, service keys, webhook
 secrets, OTP evidence, wallet authority fields, or provider credentials. The
 Vercel BFF reads server-only gateway proxy variables without the `VITE_` prefix.
-It does not connect to the database and it does not sign portal sessions.
+It does not connect to the database and it does not sign portal sessions. The
+browser must call only `/api/portal/*`; gateway base URLs are server-only proxy
+configuration, not frontend runtime configuration.
 
 Server-only Vercel variables for the portal proxy only:
 
