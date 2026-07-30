@@ -5,6 +5,7 @@ import {
   FileCheck2,
   Gauge,
   HeartPulse,
+  Siren,
   KeyRound,
   UserCog,
   Network,
@@ -26,6 +27,7 @@ export type SectionId =
   | 'scopes'
   | 'webhooks'
   | 'health'
+  | 'incidents'
   | 'docs'
   | 'events'
   | 'runtime';
@@ -46,6 +48,7 @@ export const navItems: NavItem[] = [
   { id: 'scopes', label: 'Permissions', icon: ShieldCheck },
   { id: 'webhooks', label: 'Payment Updates', icon: Webhook },
   { id: 'health', label: 'System Checks', icon: HeartPulse },
+  { id: 'incidents', label: 'Incidents', icon: Siren },
   { id: 'docs', label: 'Docs & SDKs', icon: BookOpen },
   { id: 'events', label: 'Activity Logs', icon: ClipboardCheck },
   { id: 'runtime', label: 'SDK Setup', icon: Network },

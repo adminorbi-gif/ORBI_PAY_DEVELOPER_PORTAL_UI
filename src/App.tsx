@@ -28,6 +28,7 @@ import {
   type PortalSession,
   type PortalUser,
   type PortalSnapshot,
+  type OperatorIncident,
   type SandboxAccount,
   type ServiceApplication,
   type ServiceRecord,
@@ -47,6 +48,7 @@ const titleFor: Record<SectionId, string> = {
   scopes: 'Permissions',
   webhooks: 'Payment Updates',
   health: 'System Checks',
+  incidents: 'Incidents',
   docs: 'Docs & SDKs',
   events: 'Activity Logs',
   runtime: 'SDK Setup',
@@ -287,8 +289,8 @@ function roleToAccessLevel(role: PortalRole) {
 function isSectionVisibleForRole(section: SectionId, role: PortalRole) {
   if (role === 'public_developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime'].includes(section);
   if (role === 'developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime', 'scopes', 'webhooks', 'health'].includes(section);
-  if (role === 'operator') return ['overview', 'services', 'access', 'keys', 'scopes', 'webhooks', 'health', 'events'].includes(section);
-  return ['overview', 'services', 'access', 'keys', 'team', 'scopes', 'webhooks', 'health', 'events', 'runtime'].includes(section);
+  if (role === 'operator') return ['overview', 'services', 'access', 'keys', 'scopes', 'webhooks', 'health', 'incidents', 'events'].includes(section);
+  return ['overview', 'services', 'access', 'keys', 'team', 'scopes', 'webhooks', 'health', 'incidents', 'events', 'runtime'].includes(section);
 }
 
 function roleCanSwitchEnvironment(role: PortalRole, snapshot?: PortalSnapshot) {
@@ -456,6 +458,7 @@ function SectionRenderer({
   if (section === 'scopes') return <ScopesAndConsent config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'webhooks') return <Webhooks config={config} state={portalState} refresh={refresh} />;
   if (section === 'health') return <Health state={portalState} />;
+  if (section === 'incidents') return <OperatorIncidents config={config} state={portalState} refresh={refresh} />;
   if (section === 'docs') return <Docs state={portalState} config={config} />;
   if (section === 'events') return <AuditEvents state={portalState} />;
   return <SdkApiReference state={portalState} config={config} role={role} />;
@@ -475,6 +478,7 @@ function AccessDenied({ role, section }: { role: PortalRole; section: SectionId 
 function Overview({ role, state }: { role: PortalRole; state: PortalState }) {
   const snapshot = state.snapshot;
   const failedWebhooks = (snapshot?.webhookDeliveries || []).filter((item) => String(item.status || '').toLowerCase() === 'failed');
+  const activeIncidents = (snapshot?.incidents || []).filter((item) => String(item.status || '').toLowerCase() !== 'resolved');
   const activeServices = (snapshot?.services || []).filter((service) => String(service.status || '').toLowerCase() === 'active');
   const pendingApplications = (snapshot?.applications || []).filter((app) =>
     ['pending_review', 'draft'].includes(String(app.status || '').toLowerCase()),
@@ -489,7 +493,7 @@ function Overview({ role, state }: { role: PortalRole; state: PortalState }) {
             <MetricCard label="Active integrations" value={String(activeServices.length)} tone="success" detail="Approved services ready for use" />
             <MetricCard label="Pending reviews" value={String(pendingApplications.length)} tone="warning" detail="Applications waiting for review" />
             <MetricCard label="Payment updates" value={String(failedWebhooks.length)} tone={failedWebhooks.length ? 'warning' : 'success'} detail="Updates that may need retry" />
-            <MetricCard label="System checks" value={String(13 - state.errors.length)} tone="info" detail={`${state.errors.length} item${state.errors.length === 1 ? '' : 's'} need attention`} />
+            <MetricCard label="Open incidents" value={String(activeIncidents.length)} tone={activeIncidents.length ? 'danger' : 'success'} detail={activeIncidents.length ? 'Operator action required' : 'No active incidents'} />
           </>
         ) : (
           <>
@@ -1375,6 +1379,134 @@ function Health({ state }: { state: PortalState }) {
       ) : (
         <EmptyState title="No integration health returned" detail="Connect operator access to /v1/developer/integration-health." />
       )}
+    </div>
+  );
+}
+
+function OperatorIncidents({ config, state, refresh }: { config: PortalConfig; state: PortalState; refresh: () => void }) {
+  const incidents = state.snapshot?.incidents || [];
+  const openCount = incidents.filter((incident) => String(incident.status || '').toLowerCase() !== 'resolved').length;
+  const criticalCount = incidents.filter((incident) => String(incident.severity || '').toLowerCase() === 'critical' && String(incident.status || '').toLowerCase() !== 'resolved').length;
+
+  return (
+    <div className="stack">
+      <div className="dashboard-grid">
+        <MetricCard label="Open incidents" value={String(openCount)} tone={openCount ? 'danger' : 'success'} detail={openCount ? 'Needs operator action' : 'Queue is clear'} />
+        <MetricCard label="Critical" value={String(criticalCount)} tone={criticalCount ? 'danger' : 'success'} detail="High priority reconciliation or runtime events" />
+        <MetricCard label="Resolved" value={String(incidents.length - openCount)} tone="info" detail="Closed with operator resolution" />
+        <MetricCard label="Source" value="Gateway" tone="neutral" detail="Monitored operator queue" />
+      </div>
+
+      <div className="panel wide-panel">
+        <PanelHeader title="Operator Incident Queue" action="Refresh" onAction={refresh} />
+        {incidents.length ? (
+          <div className="incident-list">
+            {incidents.map((incident) => (
+              <IncidentCard config={config} incident={incident} refresh={refresh} key={String(incident.incidentId)} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState title="No incidents open" detail="Reconciliation and runtime alerts will appear here when operator action is required." />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function IncidentCard({ config, incident, refresh }: { config: PortalConfig; incident: OperatorIncident; refresh: () => void }) {
+  const [message, setMessage] = useState<string>();
+  const [working, setWorking] = useState<string>();
+  const incidentId = String(incident.incidentId || '');
+  const status = String(incident.status || 'open').toLowerCase();
+  const severity = String(incident.severity || 'warning').toLowerCase();
+  const resource = objectValue(incident.resource);
+  const metadata = objectValue(incident.metadata);
+  const runbook = incident.runbook || {};
+  const runbookSteps = Array.isArray(runbook.steps) ? runbook.steps : [];
+  const actorEmail = readStoredPortalSession()?.user.email || 'portal-operator';
+
+  const callIncidentAction = async (
+    action: 'acknowledge' | 'assign' | 'resolve',
+    label: string,
+    body: Record<string, unknown>,
+  ) => {
+    const reason = `${label} incident ${incidentId}.`;
+    if (!window.confirm(`${reason}\n\nContinue?`)) return;
+    setWorking(action);
+    setMessage(undefined);
+    const result = await gatewayRequest(config, `/v1/operator/incidents/${encodeURIComponent(incidentId)}/${action}`, 'operator', {
+      method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason,
+      body: JSON.stringify(body),
+    });
+    setWorking(undefined);
+    setMessage(result.ok ? `${label} completed.` : result.error);
+    if (result.ok) refresh();
+  };
+
+  const acknowledge = () => callIncidentAction('acknowledge', 'Acknowledge', {
+    acknowledgedBy: actorEmail,
+    note: 'Incident acknowledged from Developer Portal.',
+  });
+
+  const assign = () => {
+    const assignedTo = window.prompt('Assign to who?', 'recon-team@orbifinancial.com');
+    if (!assignedTo?.trim()) return;
+    void callIncidentAction('assign', 'Assign', {
+      assignedTo: assignedTo.trim(),
+      assignedBy: actorEmail,
+      note: 'Assigned from Developer Portal.',
+    });
+  };
+
+  const resolve = () => {
+    const resolution = window.prompt('Resolution note');
+    if (!resolution?.trim()) return;
+    void callIncidentAction('resolve', 'Resolve', {
+      resolvedBy: actorEmail,
+      resolution: resolution.trim(),
+    });
+  };
+
+  return (
+    <div className={`incident-card ${severity} ${status}`}>
+      <div className="incident-main">
+        <div className="incident-title-row">
+          <StatusPill tone={severity === 'critical' ? 'danger' : 'warning'}>{severity}</StatusPill>
+          <StatusPill tone={toneFromStatus(status)}>{status}</StatusPill>
+          <span>{incident.createdAt ? new Date(String(incident.createdAt)).toLocaleString() : 'Time unavailable'}</span>
+        </div>
+        <h3>{String(incident.title || incident.incidentType || 'Operator incident')}</h3>
+        <p>{String(incident.message || 'No incident message returned.')}</p>
+        <div className="incident-meta-grid">
+          <InfoLine label="Incident ID" value={incidentId || '-'} />
+          <InfoLine label="Type" value={String(incident.incidentType || '-')} />
+          <InfoLine label="Resource" value={String(resource.id || resource.type || '-')} />
+          <InfoLine label="Exceptions" value={String(metadata.exceptionCount || '-')} />
+        </div>
+        {runbookSteps.length > 0 && (
+          <div className="runbook-box">
+            <strong>{String(runbook.name || 'Runbook')}</strong>
+            {runbookSteps.slice(0, 5).map((step, index) => (
+              <span key={`${incidentId}-step-${index}`}>{index + 1}. {step}</span>
+            ))}
+          </div>
+        )}
+        {message && <div className="inline-message">{message}</div>}
+      </div>
+      <div className="incident-actions">
+        <Copyable value={incidentId || '-'} />
+        <button className="ghost-action" disabled={!incidentId || status === 'resolved' || working === 'acknowledge'} onClick={acknowledge}>
+          Acknowledge
+        </button>
+        <button className="ghost-action" disabled={!incidentId || status === 'resolved' || working === 'assign'} onClick={assign}>
+          Assign
+        </button>
+        <button className="button-primary inline-link" disabled={!incidentId || status === 'resolved' || working === 'resolve'} onClick={resolve}>
+          Resolve
+        </button>
+      </div>
     </div>
   );
 }

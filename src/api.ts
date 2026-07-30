@@ -75,6 +75,29 @@ export type WebhookDelivery = Record<string, unknown> & {
   createdAt?: string;
 };
 
+export type OperatorIncident = Record<string, unknown> & {
+  incidentId?: string;
+  incidentType?: string;
+  severity?: 'warning' | 'critical' | string;
+  status?: 'open' | 'acknowledged' | 'assigned' | 'resolved' | string;
+  title?: string;
+  message?: string;
+  resource?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  runbook?: {
+    name?: string;
+    steps?: string[];
+  };
+  assignedTo?: string;
+  acknowledgedBy?: string;
+  acknowledgedAt?: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  resolution?: string;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
 export type SandboxAccount = Record<string, unknown> & {
   id?: string;
   name?: string;
@@ -99,6 +122,7 @@ export type PortalSnapshot = {
   serviceProfile?: Record<string, unknown>;
   portalUsers?: PortalUser[];
   portalAudit?: Array<Record<string, unknown>>;
+  incidents?: OperatorIncident[];
 };
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');
@@ -262,6 +286,7 @@ const emptySnapshot = (): PortalSnapshot => ({
   sandboxAccounts: [],
   portalUsers: [],
   portalAudit: [],
+  incidents: [],
 });
 
 export async function fetchPortalSnapshot(config: PortalConfig, accessLevel: PortalAccessLevel) {
