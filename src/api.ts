@@ -43,6 +43,7 @@ export type ServiceRecord = Record<string, unknown> & {
   environment?: string;
   scopesApproved?: string[];
   scopesPending?: string[];
+  browserOrigins?: string[];
   redirectUrls?: string[];
   webhookUrls?: string[];
 };

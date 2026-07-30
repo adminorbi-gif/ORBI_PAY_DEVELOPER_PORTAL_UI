@@ -592,6 +592,7 @@ function ServiceCard({ config, service, refresh, role }: { config: PortalConfig;
   const code = String(service.serviceCode || service.code || 'unknown-service');
   const granted = arrayValue(service, 'scopesGranted', 'scopes_granted', 'scopesApproved', 'scopes_approved');
   const pending = arrayValue(service, 'scopesPending', 'scopes_pending');
+  const browserOrigins = arrayValue(service, 'browserOrigins', 'browser_origins');
   const redirectUrls = arrayValue(service, 'redirectUrls', 'redirect_urls');
   const webhookUrls = arrayValue(service, 'webhookUrls', 'webhook_urls');
   const metadata = objectValue(service.metadata);
@@ -608,6 +609,7 @@ function ServiceCard({ config, service, refresh, role }: { config: PortalConfig;
       </div>
       <InfoLine label="Approved permissions" value={granted.join(', ') || 'None'} />
       <InfoLine label="Pending permissions" value={pending.join(', ') || 'None'} />
+      <InfoLine label="Website origins" value={String(browserOrigins.length)} />
       <InfoLine label="Redirect URLs" value={String(redirectUrls.length)} />
       <InfoLine label="Payment update URLs" value={String(webhookUrls.length)} />
       <InfoLine label="Merchant profile" value={String(merchant.merchantIdEnv || 'Not configured')} />
@@ -963,6 +965,7 @@ function SandboxAccountRow({ account }: { account: SandboxAccount }) {
 function ProductionAccessRequest({ config, refresh }: { config: PortalConfig; refresh: () => void }) {
   const [displayName, setDisplayName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
+  const [websiteOrigin, setWebsiteOrigin] = useState('');
   const [webhookUrl, setWebhookUrl] = useState('');
   const [redirectUrl, setRedirectUrl] = useState('');
   const [message, setMessage] = useState<string>();
@@ -980,6 +983,7 @@ function ProductionAccessRequest({ config, refresh }: { config: PortalConfig; re
         countryCode: 'TZ',
         requestedEnvironments: ['live'],
         requestedScopes: ['identity:resolve', 'payments:create', 'escrow:create', 'webhooks:receive'],
+        browserOrigins: websiteOrigin.trim() ? [websiteOrigin.trim()] : [],
         redirectUrls: redirectUrl.trim() ? [redirectUrl.trim()] : [],
         webhookUrls: webhookUrl.trim() ? [webhookUrl.trim()] : [],
         useCases: ['Production ORBI Pay integration request from Developer Portal.'],
@@ -1001,13 +1005,14 @@ function ProductionAccessRequest({ config, refresh }: { config: PortalConfig; re
         <p className="eyebrow">Go live request</p>
         <h2>Request Production Access</h2>
         <p>
-          Build safely in sandbox first. ORBI reviews your business, requested features, return URLs, payment update URLs,
-          and readiness before production keys are issued.
+          Build safely in sandbox first. ORBI reviews your business, website domain, requested features, return URLs,
+          payment update URLs, and readiness before production keys are issued.
         </p>
       </div>
       <div className="form-grid">
         <label>Business / integration name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Merchant Checkout" /></label>
         <label>Contact email<input value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} placeholder="ops@merchant.example" /></label>
+        <label>Website origin<input value={websiteOrigin} onChange={(event) => setWebsiteOrigin(event.target.value)} placeholder="https://www.tag.co.tz" /></label>
         <label>Redirect URL<input value={redirectUrl} onChange={(event) => setRedirectUrl(event.target.value)} placeholder="https://merchant.example.com/orbi/return" /></label>
         <label>Payment update URL<input value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} placeholder="https://merchant.example.com/api/orbi/updates" /></label>
       </div>
@@ -2214,6 +2219,7 @@ function PortalModal({
         countryCode: 'TZ',
         requestedEnvironments: [config.environment],
         requestedScopes: ['payments:create', 'webhooks:receive'],
+        browserOrigins: ['https://merchant.example.com'],
         redirectUrls: ['https://merchant.example.com/orbi/return'],
         webhookUrls: ['https://merchant.example.com/api/orbi/webhooks'],
         useCases: ['Protected checkout'],
