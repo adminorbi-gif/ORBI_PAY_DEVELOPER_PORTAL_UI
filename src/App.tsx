@@ -1653,6 +1653,7 @@ ORBI_PAY_WEBHOOK_URL=https://merchant.example.com/api/orbi/updates`,
 export const orbi = createOrbi({
   baseUrl: process.env.ORBI_PAY_GATEWAY_BASE_URL,
   serviceKey: process.env.ORBI_PAY_SERVICE_KEY,
+  authMode: 'access_token',
   environment: process.env.ORBI_PAY_ENVIRONMENT,
 });`,
       },
@@ -1747,6 +1748,7 @@ from orbi_pay_gateway import Orbi
 orbi = Orbi(
   base_url=os.environ["ORBI_PAY_GATEWAY_BASE_URL"],
   service_key=os.environ["ORBI_PAY_SERVICE_KEY"],
+  auth_mode="access_token",
   environment="Demo",
 )
 
@@ -1781,6 +1783,7 @@ ORBI_PAY_WEBHOOK_SECRET=orbi_whsec_sandbox_xxx`,
 orbi = Orbi(
   base_url=os.environ["ORBI_PAY_GATEWAY_BASE_URL"],
   service_key=os.environ["ORBI_PAY_SERVICE_KEY"],
+  auth_mode="access_token",
   environment=os.environ.get("ORBI_PAY_ENVIRONMENT", "Demo"),
 )`,
       },
@@ -1820,6 +1823,7 @@ update_order_from_orbi_event(event)`,
 $orbi = Orbi::create([
   'baseUrl' => env('ORBI_PAY_GATEWAY_BASE_URL'),
   'serviceKey' => env('ORBI_PAY_SERVICE_KEY'),
+  'authMode' => 'access_token',
   'environment' => 'Demo',
 ]);
 
@@ -1854,6 +1858,7 @@ ORBI_PAY_WEBHOOK_SECRET=orbi_whsec_sandbox_xxx`,
         snippet: `$orbi = Orbi::create([
   'baseUrl' => env('ORBI_PAY_GATEWAY_BASE_URL'),
   'serviceKey' => env('ORBI_PAY_SERVICE_KEY'),
+  'authMode' => 'access_token',
   'environment' => env('ORBI_PAY_ENVIRONMENT', 'Demo'),
 ]);`,
       },
@@ -1880,14 +1885,20 @@ ORBI_PAY_WEBHOOK_SECRET=orbi_whsec_sandbox_xxx`,
 ], [
   'idempotencyKey' => 'payment-intent:merchant:ORDER-10001',
 ]);`,
-    updateSnippet: `$event = $orbi->webhooks()->parse([
+    updateSnippet: `use Orbi\\PayGateway\\Webhooks;
+
+$result = Webhooks::verifyAndParse([
   'rawBody' => $request->getContent(),
   'signatureHeader' => $request->header('x-orbi-pay-signature', ''),
   'timestampHeader' => $request->header('x-orbi-pay-timestamp', ''),
   'secret' => env('ORBI_PAY_WEBHOOK_SECRET'),
 ]);
 
-updateOrderFromOrbiEvent($event);`,
+if (!($result['ok'] ?? false)) {
+  abort(400, 'Invalid ORBI webhook');
+}
+
+updateOrderFromOrbiEvent($result['event']);`,
   },
   {
     language: 'cURL Smoke Test',

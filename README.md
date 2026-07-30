@@ -119,6 +119,7 @@ import { createOrbi } from '@orbifinancial/pay-gateway';
 const orbi = createOrbi({
   baseUrl: process.env.ORBI_PAY_GATEWAY_BASE_URL!,
   serviceKey: process.env.ORBI_PAY_SERVICE_KEY!,
+  authMode: 'access_token',
   environment: process.env.ORBI_PAY_ENVIRONMENT === 'Production' ? 'Production' : 'Demo',
 });
 ```
@@ -144,14 +145,19 @@ await orbi.transfers.send({
 Python SDK is live on PyPI:
 
 ```bash
-pip install orbi-pay-gateway
+pip install orbi-pay-gateway==0.1.1
 ```
 
 PHP SDK is live on Packagist:
 
 ```bash
-composer require orbifinancial/pay-gateway
+composer require orbifinancial/pay-gateway:^0.1.1
 ```
+
+All official SDKs support short-lived service access tokens. New integrations
+should set `authMode: 'access_token'` in Node, `auth_mode="access_token"` in
+Python, and `authMode => 'access_token'` in PHP. Direct API-key mode remains
+only for controlled migration.
 
 ## Current Scope
 
