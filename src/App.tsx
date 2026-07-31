@@ -976,7 +976,20 @@ function ProductionAccessRequest({ config, refresh }: { config: PortalConfig; re
   const [working, setWorking] = useState(false);
 
   const requestLiveAccess = async () => {
+    const validationError = validateProductionRequest({
+      displayName,
+      contactEmail,
+      websiteOrigin,
+      redirectUrl,
+      webhookUrl,
+    });
+    if (validationError) {
+      setMessage(validationError);
+      return;
+    }
+
     setWorking(true);
+    setMessage(undefined);
     const result = await gatewayRequest(config, '/v1/developer/service-applications', 'operator', {
       method: 'POST',
       body: JSON.stringify({
@@ -995,10 +1008,11 @@ function ProductionAccessRequest({ config, refresh }: { config: PortalConfig; re
         metadata: {
           requested_from: 'developer_portal',
           requester_role: 'developer',
+          live_readiness_note: 'Developer supplied trusted website, return URL, and payment update URL for review.',
         },
       }),
     });
-    setMessage(result.ok ? 'Production access request submitted for operator review.' : result.error);
+    setMessage(result.ok ? 'Request sent. ORBI will review your business, domains, and requested payment features before live keys are issued.' : result.error);
     setWorking(false);
     if (result.ok) refresh();
   };
@@ -1009,23 +1023,56 @@ function ProductionAccessRequest({ config, refresh }: { config: PortalConfig; re
         <p className="eyebrow">Go live request</p>
         <h2>Request Production Access</h2>
         <p>
-          Build safely in sandbox first. ORBI reviews your business, website domain, requested features, return URLs,
-          payment update URLs, and readiness before production keys are issued.
+          Build safely in sandbox first. For live payments, tell ORBI where your website runs, where customers return
+          after payment, and where payment updates should be sent.
         </p>
       </div>
       <div className="form-grid">
         <label>Business / integration name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Merchant Checkout" /></label>
         <label>Contact email<input value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} placeholder="ops@merchant.example" /></label>
-        <label>Website origin<input value={websiteOrigin} onChange={(event) => setWebsiteOrigin(event.target.value)} placeholder="https://www.tag.co.tz" /></label>
-        <label>Redirect URL<input value={redirectUrl} onChange={(event) => setRedirectUrl(event.target.value)} placeholder="https://merchant.example.com/orbi/return" /></label>
+        <label>Website domain<input value={websiteOrigin} onChange={(event) => setWebsiteOrigin(event.target.value)} placeholder="https://www.tag.co.tz" /></label>
+        <label>Customer return URL<input value={redirectUrl} onChange={(event) => setRedirectUrl(event.target.value)} placeholder="https://merchant.example.com/orbi/return" /></label>
         <label>Payment update URL<input value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} placeholder="https://merchant.example.com/api/orbi/updates" /></label>
       </div>
-      <button className="button-primary inline-link" onClick={requestLiveAccess} disabled={working || !displayName || !contactEmail}>
+      <p className="security-note">
+        Use public HTTPS URLs only. Localhost, private IPs, plain HTTP, and wildcard domains are allowed only in sandbox.
+      </p>
+      <button className="button-primary inline-link" onClick={requestLiveAccess} disabled={working || !displayName || !contactEmail || !websiteOrigin || !redirectUrl || !webhookUrl}>
         {working ? 'Submitting' : 'Submit production request'} <ArrowRight size={16} />
       </button>
       {message && <div className="inline-message">{message}</div>}
     </div>
   );
+}
+
+function validateProductionRequest(input: {
+  displayName: string;
+  contactEmail: string;
+  websiteOrigin: string;
+  redirectUrl: string;
+  webhookUrl: string;
+}): string | undefined {
+  if (!input.displayName.trim()) return 'Enter your business or integration name.';
+  if (!input.contactEmail.trim().includes('@')) return 'Enter a working contact email.';
+  if (!isPublicHttpsUrl(input.websiteOrigin, true)) return 'Website domain must be a public HTTPS origin, for example https://www.tag.co.tz.';
+  if (!isPublicHttpsUrl(input.redirectUrl)) return 'Customer return URL must be a public HTTPS URL.';
+  if (!isPublicHttpsUrl(input.webhookUrl)) return 'Payment update URL must be a public HTTPS URL.';
+  return undefined;
+}
+
+function isPublicHttpsUrl(value: string, originOnly = false): boolean {
+  try {
+    const url = new URL(value.trim());
+    if (url.protocol !== 'https:') return false;
+    if (!url.hostname.includes('.')) return false;
+    if (['localhost', '127.0.0.1', '0.0.0.0'].includes(url.hostname)) return false;
+    if (/^(10|172\.(1[6-9]|2\d|3[0-1])|192\.168)\./.test(url.hostname)) return false;
+    if (url.hostname.includes('*')) return false;
+    if (originOnly && (url.pathname !== '/' || url.search || url.hash)) return false;
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function KeysAndSecrets({ config, state, refresh, openKeyModal }: { config: PortalConfig; state: PortalState; refresh: () => void; openKeyModal: () => void }) {
