@@ -880,24 +880,38 @@ function AccessRequestPanel({
 function ApplicationApproval({ config, application, refresh }: { config: PortalConfig; application: ServiceApplication; refresh: () => void }) {
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState<string>();
+  const [oneTimeSecrets, setOneTimeSecrets] = useState<Record<string, unknown>>();
   const applicationId = String(application.applicationId || '');
   const canApprove = applicationId && String(application.status || '').toLowerCase() === 'pending_review';
 
   const approve = async () => {
-    const reason = `Approve developer application ${applicationId}.`;
+    const requestedEnvironments = arrayValue(application, 'requestedEnvironments', 'requested_environments');
+    const credentialEnvironment = requestedEnvironments.includes('live') ? 'live' : 'sandbox';
+    const reason = `Approve developer application ${applicationId} and issue ${credentialEnvironment} credentials.`;
     if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setWorking(true);
-    const result = await gatewayRequest(config, `/v1/developer/service-applications/${encodeURIComponent(applicationId)}/approve`, 'operator', {
+    setOneTimeSecrets(undefined);
+    const result = await gatewayRequest<Record<string, unknown>>(config, `/v1/developer/service-applications/${encodeURIComponent(applicationId)}/approve`, 'operator', {
       method: 'POST',
       portalConfirmationAccepted: true,
       portalReason: reason,
       body: JSON.stringify({
         serviceCode: String(application.displayName || application.legalName || 'service'),
         initialStatus: config.environment === 'live' ? 'draft' : 'active',
+        grantRequestedScopes: true,
+        issueCredentials: true,
+        credentialEnvironment,
+        decidedBy: readStoredPortalSession()?.user.email || 'portal-operator',
         reason,
       }),
     });
-    setMessage(result.ok ? 'Approved' : result.error);
+    if (result.ok) {
+      const credentials = (result.data as { credentials?: Record<string, unknown> })?.credentials;
+      setOneTimeSecrets(credentials);
+      setMessage('Approved. Copy any new credentials now.');
+    } else {
+      setMessage(result.error);
+    }
     setWorking(false);
     if (result.ok) refresh();
   };
@@ -908,6 +922,13 @@ function ApplicationApproval({ config, application, refresh }: { config: PortalC
         <Check size={14} /> Approve
       </button>
       {message && <small>{message}</small>}
+      {oneTimeSecrets && (
+        <div className="secret-preview compact">
+          <strong>One-time credentials</strong>
+          {Boolean(oneTimeSecrets.apiKeySecret) && <Copyable value={String(oneTimeSecrets.apiKeySecret)} />}
+          {Boolean(oneTimeSecrets.webhookSigningSecret) && <Copyable value={String(oneTimeSecrets.webhookSigningSecret)} />}
+        </div>
+      )}
     </div>
   );
 }
@@ -1014,7 +1035,8 @@ function SandboxSetup({ config, state, refresh, role }: { config: PortalConfig; 
         </div>
       </div>
 
-      {role.includes('developer') && <ProductionAccessRequest config={config} refresh={refresh} />}
+      {role === 'developer' && <SandboxIntegrationWizard config={config} refresh={refresh} />}
+      {role === 'developer' && <ProductionAccessRequest config={config} refresh={refresh} />}
 
       <div className="two-column">
         <div className="panel action-card">
@@ -1048,6 +1070,109 @@ function SandboxAccountRow({ account }: { account: SandboxAccount }) {
         <span>{String(account.id || '-')} · {String(account.role || 'test')}</span>
       </div>
       <b>{Number.isFinite(amount) ? money.format(amount) : String(account.balance || '-')}</b>
+    </div>
+  );
+}
+
+function SandboxIntegrationWizard({ config, refresh }: { config: PortalConfig; refresh: () => void }) {
+  const [displayName, setDisplayName] = useState('');
+  const [contactEmail, setContactEmail] = useState(readStoredPortalSession()?.user.email || '');
+  const [businessType, setBusinessType] = useState('merchant');
+  const [websiteOrigin, setWebsiteOrigin] = useState('http://localhost:3000');
+  const [redirectUrl, setRedirectUrl] = useState('http://localhost:3000/orbi/return');
+  const [webhookUrl, setWebhookUrl] = useState('http://localhost:3000/api/orbi/webhooks');
+  const [useCase, setUseCase] = useState('Build and test ORBI Pay checkout in sandbox.');
+  const [message, setMessage] = useState<string>();
+  const [credentials, setCredentials] = useState<Record<string, unknown>>();
+  const [working, setWorking] = useState(false);
+
+  const createSandboxIntegration = async () => {
+    if (!displayName.trim()) {
+      setMessage('Enter your integration or business name.');
+      return;
+    }
+    if (!contactEmail.includes('@')) {
+      setMessage('Enter a working contact email.');
+      return;
+    }
+    setWorking(true);
+    setMessage(undefined);
+    setCredentials(undefined);
+    const result = await gatewayRequest<Record<string, unknown>>(config, '/v1/developer/service-applications', 'operator', {
+      method: 'POST',
+      body: JSON.stringify({
+        legalName: displayName.trim(),
+        displayName: displayName.trim(),
+        contactEmail: contactEmail.trim(),
+        businessType,
+        countryCode: 'TZ',
+        requestedEnvironments: ['sandbox'],
+        requestedScopes: ['identity:resolve', 'payment_profile:create', 'payments:create', 'escrow:create', 'webhooks:receive'],
+        browserOrigins: websiteOrigin.trim() ? [websiteOrigin.trim()] : [],
+        redirectUrls: redirectUrl.trim() ? [redirectUrl.trim()] : [],
+        webhookUrls: webhookUrl.trim() ? [webhookUrl.trim()] : [],
+        useCases: [useCase.trim() || 'Sandbox ORBI Pay integration testing.'],
+        termsAccepted: true,
+        metadata: {
+          requested_from: 'developer_portal_sandbox_wizard',
+          onboarding_mode: 'sandbox_auto_provision',
+        },
+      }),
+    });
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    const data = result.data || {};
+    setCredentials((data as { credentials?: Record<string, unknown> }).credentials || {});
+    setMessage('Sandbox integration created. Copy your keys now and store them safely.');
+    refresh();
+  };
+
+  return (
+    <div className="panel wide-panel production-request">
+      <div>
+        <p className="eyebrow">Sandbox onboarding</p>
+        <h2>Create your first integration</h2>
+        <p>
+          Create a sandbox app, get test credentials, and start building with ORBI SDKs. Sandbox keys cannot process real customer money.
+        </p>
+      </div>
+      <div className="form-grid">
+        <label>Integration name<input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder="Tag POS Sandbox" /></label>
+        <label>Contact email<input value={contactEmail} onChange={(event) => setContactEmail(event.target.value)} placeholder="dev@company.com" /></label>
+        <label>
+          Business type
+          <select value={businessType} onChange={(event) => setBusinessType(event.target.value)}>
+            <option value="merchant">Merchant / POS</option>
+            <option value="marketplace">Marketplace</option>
+            <option value="saccos">SACCOS</option>
+            <option value="organization">Organization</option>
+            <option value="agent_network">Agent network</option>
+            <option value="platform">Platform</option>
+          </select>
+        </label>
+        <label>Website origin<input value={websiteOrigin} onChange={(event) => setWebsiteOrigin(event.target.value)} placeholder="http://localhost:3000" /></label>
+        <label>Return URL<input value={redirectUrl} onChange={(event) => setRedirectUrl(event.target.value)} placeholder="http://localhost:3000/orbi/return" /></label>
+        <label>Payment update URL<input value={webhookUrl} onChange={(event) => setWebhookUrl(event.target.value)} placeholder="http://localhost:3000/api/orbi/webhooks" /></label>
+      </div>
+      <label>
+        What are you testing?
+        <textarea value={useCase} onChange={(event) => setUseCase(event.target.value)} rows={3} />
+      </label>
+      <button className="button-primary inline-link" onClick={createSandboxIntegration} disabled={working || !displayName.trim()}>
+        {working ? 'Creating sandbox app' : 'Create sandbox app'} <ArrowRight size={16} />
+      </button>
+      {message && <div className="inline-message">{message}</div>}
+      {credentials && (
+        <div className="secret-preview">
+          <strong>Copy these sandbox keys now. They will not be shown again.</strong>
+          <InfoLine label="Environment" value={String(credentials.environment || 'sandbox')} />
+          {Boolean(credentials.apiKeySecret) && <Copyable value={String(credentials.apiKeySecret)} />}
+          {Boolean(credentials.webhookSigningSecret) && <Copyable value={String(credentials.webhookSigningSecret)} />}
+        </div>
+      )}
     </div>
   );
 }
