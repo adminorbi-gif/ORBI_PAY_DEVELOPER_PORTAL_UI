@@ -1311,7 +1311,7 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
             user.liveAccess ? 'Enabled' : 'Sandbox only',
             user.enabled === false ? 'Disabled' : 'Enabled',
           ])}
-          empty="No portal users returned. Team access is managed by the Pay Gateway backend."
+          empty="No portal users returned. Team access is managed by approved ORBI administrators."
         />
       </div>
 
@@ -1913,9 +1913,9 @@ function SdkApiReference({ state, config, role }: { state: PortalState; config: 
             ['POST', '/v1/payment-intents', 'Create hosted checkout payment intent.'],
             ['GET', '/v1/payment-intents/:intentId', 'Read intent status as payment truth with webhook.'],
             ['POST', '/v1/paysafe/escrows', 'Create protected PaySafe escrow hold.'],
-            ['POST', '/v1/paysafe/escrows/:escrowId/release', 'Request release through Core escrow lifecycle.'],
-            ['POST', '/v1/paysafe/escrows/:escrowId/refund', 'Request refund through Core escrow lifecycle.'],
-            ['POST', '/v1/paysafe/escrows/:escrowId/dispute', 'Open dispute through Core escrow lifecycle.'],
+            ['POST', '/v1/paysafe/escrows/:escrowId/release', 'Request release through ORBI PaySafe rules.'],
+            ['POST', '/v1/paysafe/escrows/:escrowId/refund', 'Request refund through ORBI PaySafe rules.'],
+            ['POST', '/v1/paysafe/escrows/:escrowId/dispute', 'Open a PaySafe dispute for review.'],
           ].map(([method, path, detail]) => (
             <div className="endpoint-card" key={path}>
               <StatusPill tone={method === 'GET' ? 'info' : 'warning'}>{method}</StatusPill>
@@ -1970,13 +1970,13 @@ const sdkMethods = [
     name: 'orbi.paysafe.escrows.create({...})',
     scope: 'escrow:create',
     risk: 'high',
-    detail: 'Create protected PaySafe escrow hold under Core lifecycle rules.',
+    detail: 'Create a protected PaySafe hold under ORBI escrow rules.',
   },
   {
     name: 'orbi.paysafe.escrows.release/refund/dispute({...})',
     scope: 'escrow:*:request',
     risk: 'high',
-    detail: 'Request escrow lifecycle actions without bypassing Core policy.',
+    detail: 'Request PaySafe actions such as release, refund, or dispute.',
   },
   {
     name: 'orbi.webhooks.parse(...)',
@@ -2758,7 +2758,7 @@ function incidentAreaLabel(incident: OperatorIncident): string {
   if (type.includes('settlement')) return 'Payment settlement';
   if (type.includes('auth')) return 'Login or access';
   if (type.includes('risk')) return 'Safety review';
-  if (type.includes('runtime')) return 'Gateway availability';
+  if (type.includes('runtime')) return 'Service availability';
   return readableLabel(type || 'service_check');
 }
 
