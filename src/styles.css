@@ -1638,6 +1638,131 @@ textarea {
   font-size: 12px;
 }
 
+.secret-code-panel {
+  margin: 18px 0 0;
+  padding: 18px;
+  color: #d1fae5;
+  background:
+    radial-gradient(circle at top right, rgba(20, 184, 166, 0.18), transparent 38%),
+    #030712;
+  border: 1px solid rgba(94, 234, 212, 0.22);
+  border-radius: 22px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 24px 70px rgba(2, 6, 23, 0.24);
+  font-family: 'Space Grotesk', ui-monospace, monospace;
+  overflow: hidden;
+}
+
+.secret-code-panel.compact {
+  width: min(100%, 560px);
+  padding: 14px;
+}
+
+.secret-code-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+}
+
+.secret-code-toolbar strong,
+.secret-code-toolbar span {
+  display: block;
+}
+
+.secret-code-toolbar strong {
+  color: white;
+  font-size: 15px;
+}
+
+.secret-code-toolbar span {
+  margin-top: 4px;
+  color: rgba(209, 250, 229, 0.72);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.secret-code-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.secret-code-meta div {
+  min-width: 0;
+  padding: 10px 12px;
+  background: rgba(15, 23, 42, 0.72);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 14px;
+}
+
+.secret-code-meta span,
+.secret-code-meta code {
+  display: block;
+}
+
+.secret-code-meta span {
+  color: rgba(209, 250, 229, 0.56);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.secret-code-meta code {
+  margin-top: 4px;
+  color: #a7f3d0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.secret-code-lines {
+  display: grid;
+  gap: 10px;
+}
+
+.secret-code-line {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.36fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.secret-code-line > span {
+  color: #67e8f9;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.secret-code-panel .copyable {
+  justify-content: flex-start;
+  width: 100%;
+  min-width: 0;
+  color: #ecfeff;
+  background: rgba(2, 6, 23, 0.86);
+  border-color: rgba(94, 234, 212, 0.22);
+  border-radius: 14px;
+}
+
+.secret-code-panel .copyable span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.secret-code-panel p {
+  margin: 14px 0 0;
+  color: rgba(209, 250, 229, 0.68);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .danger-action {
   color: #991b1b;
   border-color: rgba(239, 68, 68, 0.24);
@@ -1726,6 +1851,11 @@ textarea {
   }
 
   .setup-step {
+    grid-template-columns: 1fr;
+  }
+
+  .secret-code-meta,
+  .secret-code-line {
     grid-template-columns: 1fr;
   }
 

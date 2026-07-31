@@ -923,11 +923,20 @@ function ApplicationApproval({ config, application, refresh }: { config: PortalC
       </button>
       {message && <small>{message}</small>}
       {oneTimeSecrets && (
-        <div className="secret-preview compact">
-          <strong>One-time credentials</strong>
-          {Boolean(oneTimeSecrets.apiKeySecret) && <Copyable value={String(oneTimeSecrets.apiKeySecret)} />}
-          {Boolean(oneTimeSecrets.webhookSigningSecret) && <Copyable value={String(oneTimeSecrets.webhookSigningSecret)} />}
-        </div>
+        <SecretCodePanel
+          compact
+          title="One-time credentials"
+          subtitle="Give these to the developer through your approved secure handover process."
+          metadata={[
+            { label: 'Environment', value: oneTimeSecrets.environment },
+            { label: 'API key id', value: objectValue(oneTimeSecrets.apiKey).keyId, masked: true },
+            { label: 'Webhook key id', value: objectValue(oneTimeSecrets.webhookSecret).secretId, masked: true },
+          ]}
+          rows={[
+            { label: 'ORBI_PAY_SERVICE_KEY', value: oneTimeSecrets.apiKeySecret },
+            { label: 'ORBI_PAY_WEBHOOK_SECRET', value: oneTimeSecrets.webhookSigningSecret },
+          ]}
+        />
       )}
     </div>
   );
@@ -1166,12 +1175,19 @@ function SandboxIntegrationWizard({ config, refresh }: { config: PortalConfig; r
       </button>
       {message && <div className="inline-message">{message}</div>}
       {credentials && (
-        <div className="secret-preview">
-          <strong>Copy these sandbox keys now. They will not be shown again.</strong>
-          <InfoLine label="Environment" value={String(credentials.environment || 'sandbox')} />
-          {Boolean(credentials.apiKeySecret) && <Copyable value={String(credentials.apiKeySecret)} />}
-          {Boolean(credentials.webhookSigningSecret) && <Copyable value={String(credentials.webhookSigningSecret)} />}
-        </div>
+        <SecretCodePanel
+          title="Copy these sandbox keys now"
+          subtitle="They will not be shown again after you leave this screen."
+          metadata={[
+            { label: 'Environment', value: credentials.environment || 'sandbox' },
+            { label: 'API key id', value: objectValue(credentials.apiKey).keyId, masked: true },
+            { label: 'Webhook key id', value: objectValue(credentials.webhookSecret).secretId, masked: true },
+          ]}
+          rows={[
+            { label: 'ORBI_PAY_SERVICE_KEY', value: credentials.apiKeySecret },
+            { label: 'ORBI_PAY_WEBHOOK_SECRET', value: credentials.webhookSigningSecret },
+          ]}
+        />
       )}
     </div>
   );
@@ -1565,10 +1581,13 @@ function SecretActions({ config, serviceCode, refresh, role }: { config: PortalC
         </button>
       )}
       {oneTimeSecret && (
-        <div className="secret-preview compact">
-          <strong>Copy this new key now. It will not be shown again.</strong>
-          <Copyable value={oneTimeSecret} />
-        </div>
+        <SecretCodePanel
+          compact
+          title="Copy this new key now"
+          subtitle="It will not be shown again after you leave this screen."
+          metadata={[{ label: 'Environment', value: config.environment }]}
+          rows={[{ label: 'NEW_ORBI_SECRET', value: oneTimeSecret }]}
+        />
       )}
       {message && <small>{message}</small>}
     </div>
@@ -2607,6 +2626,60 @@ function Copyable({ value }: { value: string }) {
       <Copy size={14} />
       <span>{value}</span>
     </button>
+  );
+}
+
+function maskSecret(value: unknown): string {
+  const text = String(value || '').trim();
+  if (!text) return '-';
+  if (text.length <= 12) return `${text.slice(0, 3)}******${text.slice(-2)}`;
+  return `${text.slice(0, 10)}****************${text.slice(-6)}`;
+}
+
+function SecretCodePanel({
+  title,
+  subtitle,
+  rows,
+  metadata,
+  compact = false,
+}: {
+  title: string;
+  subtitle: string;
+  rows: Array<{ label: string; value?: unknown }>;
+  metadata?: Array<{ label: string; value?: unknown; masked?: boolean }>;
+  compact?: boolean;
+}) {
+  const visibleRows = rows.filter((row) => String(row.value || '').trim());
+  const visibleMetadata = (metadata || []).filter((row) => String(row.value || '').trim());
+  return (
+    <div className={`secret-code-panel ${compact ? 'compact' : ''}`}>
+      <div className="secret-code-toolbar">
+        <div>
+          <strong>{title}</strong>
+          <span>{subtitle}</span>
+        </div>
+        <StatusPill tone="warning">Shown once</StatusPill>
+      </div>
+      {visibleMetadata.length > 0 && (
+        <div className="secret-code-meta">
+          {visibleMetadata.map((item) => (
+            <div key={item.label}>
+              <span>{item.label}</span>
+              <code>{item.masked ? maskSecret(item.value) : String(item.value)}</code>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="secret-code-lines">
+        {visibleRows.map((row) => (
+          <div className="secret-code-line" key={row.label}>
+            <span>{row.label}</span>
+            <Copyable value={String(row.value)} />
+          </div>
+        ))}
+      </div>
+      <p>Store these keys in your server secret manager. Do not put them in browser code, Git, screenshots, or chats.</p>
+    </div>
   );
 }
 
