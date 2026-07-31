@@ -227,14 +227,14 @@ export async function loginPortalWithOtp(config: PortalConfig, email: string, pa
 
 export async function startPortalMfaEnrollment(config: PortalConfig): Promise<GatewayResult<MfaEnrollmentSetup>> {
   try {
-    const response = await fetch(`${config.bffBaseUrl}/auth/mfa/enroll`, {
+    const response = await fetch(`${config.bffBaseUrl}/auth/mfa-action`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
       },
-      body: JSON.stringify({ environment: config.environment }),
+      body: JSON.stringify({ action: 'enroll', environment: config.environment }),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
@@ -248,14 +248,14 @@ export async function startPortalMfaEnrollment(config: PortalConfig): Promise<Ga
 
 export async function verifyPortalMfaEnrollment(config: PortalConfig, code: string): Promise<GatewayResult<PortalSession>> {
   try {
-    const response = await fetch(`${config.bffBaseUrl}/auth/mfa/verify`, {
+    const response = await fetch(`${config.bffBaseUrl}/auth/mfa-action`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
       },
-      body: JSON.stringify({ code, environment: config.environment }),
+      body: JSON.stringify({ action: 'verify', code, environment: config.environment }),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
@@ -271,14 +271,14 @@ export async function verifyPortalMfaEnrollment(config: PortalConfig, code: stri
 
 export async function stepUpPortalMfa(config: PortalConfig, code: string): Promise<GatewayResult<PortalSession>> {
   try {
-    const response = await fetch(`${config.bffBaseUrl}/auth/mfa/step-up`, {
+    const response = await fetch(`${config.bffBaseUrl}/auth/mfa-action`, {
       method: 'POST',
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
       },
-      body: JSON.stringify({ code, environment: config.environment }),
+      body: JSON.stringify({ action: 'step-up', code, environment: config.environment }),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {

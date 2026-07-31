@@ -1488,13 +1488,14 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
   const loadOwnMfa = async () => {
     setMessage(undefined);
     try {
-      const url = new URL(`${config.bffBaseUrl}/auth/mfa/status`, window.location.origin);
-      url.searchParams.set('environment', config.environment);
-      const response = await fetch(url, {
+      const response = await fetch(`${config.bffBaseUrl}/auth/mfa-action`, {
+        method: 'POST',
         headers: {
           Accept: 'application/json',
+          'Content-Type': 'application/json',
           ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
         },
+        body: JSON.stringify({ action: 'status', environment: config.environment }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) {
