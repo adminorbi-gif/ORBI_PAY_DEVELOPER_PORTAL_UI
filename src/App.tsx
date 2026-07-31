@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   Check,
   ChevronRight,
@@ -2861,8 +2862,35 @@ function AuthModal({
   const [countryCode, setCountryCode] = useState('TZ');
   const [useCase, setUseCase] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [signupStep, setSignupStep] = useState(1);
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
+
+  const switchMode = (nextMode: 'signin' | 'signup') => {
+    setMode(nextMode);
+    setSignupStep(1);
+    setMessage(undefined);
+  };
+
+  const signupStepIsValid =
+    signupStep === 1
+      ? Boolean(name.trim() && username.trim() && email.trim() && password.length >= 12)
+      : signupStep === 2
+        ? Boolean(companyName.trim() && countryCode.trim().length === 2 && useCase.trim())
+        : termsAccepted;
+
+  const moveSignup = (direction: -1 | 1) => {
+    setMessage(undefined);
+    if (direction === 1 && !signupStepIsValid) {
+      setMessage(
+        signupStep === 1
+          ? 'Complete your account details and use a password with at least 12 characters.'
+          : 'Add your business or project, country, and a short description of what you are building.',
+      );
+      return;
+    }
+    setSignupStep((current) => Math.min(3, Math.max(1, current + direction)));
+  };
 
   const submitLogin = async () => {
     setWorking(true);
@@ -2896,6 +2924,7 @@ function AuthModal({
     }
     setMessage(result.data.nextStep || 'Account created. Sign in to start building in sandbox.');
     setMode('signin');
+    setSignupStep(1);
     setOtp('');
   };
 
@@ -2913,89 +2942,149 @@ function AuthModal({
             : 'Use your developer, operator, or admin account to continue your ORBI integration work.'}
         </p>
         <div className="auth-tabs">
-          <button className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setMessage(undefined); }}>Create account</button>
-          <button className={mode === 'signin' ? 'active' : ''} onClick={() => { setMode('signin'); setMessage(undefined); }}>Sign in</button>
+          <button className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}>Create account</button>
+          <button className={mode === 'signin' ? 'active' : ''} onClick={() => switchMode('signin')}>Sign in</button>
         </div>
-        {mode === 'signup' && (
-          <>
-            <label>
-              Full name
-              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" autoComplete="name" />
-            </label>
-            <label>
-              Developer username
-              <input
-                value={username}
-                onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32))}
-                placeholder="example_team"
-                autoComplete="username"
-              />
-            </label>
-            <label>
-              Business or project
-              <input value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Example: Tag Commerce, SACCOS portal" autoComplete="organization" />
-            </label>
-          </>
-        )}
-        <label>
-          Email
-          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@business.com" autoComplete="email" />
-        </label>
-        <label>
-          Password
-          <input
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            placeholder={mode === 'signup' ? 'At least 12 characters' : 'Your portal password'}
-            type="password"
-            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') void (mode === 'signup' ? submitSignup() : submitLogin());
-            }}
-          />
-        </label>
-        {mode === 'signup' ? (
-          <>
-            <div className="form-row">
+
+        <div className="auth-form-body">
+          {mode === 'signup' && (
+            <div className="signup-progress" aria-label={`Signup step ${signupStep} of 3`}>
+              <div className="signup-progress-copy">
+                <span>Step {signupStep} of 3</span>
+                <strong>{signupStep === 1 ? 'Your account' : signupStep === 2 ? 'Your project' : 'Review & agree'}</strong>
+              </div>
+              <div className="signup-progress-track" aria-hidden="true">
+                {[1, 2, 3].map((step) => <i key={step} className={step <= signupStep ? 'active' : ''} />)}
+              </div>
+            </div>
+          )}
+
+          {mode === 'signup' && signupStep === 1 && (
+            <div className="auth-step">
+              <label>
+                Full name
+                <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" autoComplete="name" />
+              </label>
+              <label>
+                Developer username
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32))}
+                  placeholder="example_team"
+                  autoComplete="username"
+                />
+              </label>
+              <label>
+                Email
+                <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@business.com" autoComplete="email" />
+              </label>
+              <label>
+                Password
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="At least 12 characters"
+                  type="password"
+                  autoComplete="new-password"
+                />
+              </label>
+            </div>
+          )}
+
+          {mode === 'signup' && signupStep === 2 && (
+            <div className="auth-step">
+              <label>
+                Business or project
+                <input value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Example: Tag Commerce, SACCOS portal" autoComplete="organization" />
+              </label>
               <label>
                 Country
                 <input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase().slice(0, 2))} placeholder="TZ" />
               </label>
+              <label>
+                What are you building?
+                <textarea
+                  value={useCase}
+                  onChange={(event) => setUseCase(event.target.value)}
+                  placeholder="Example: I want to accept ORBI Pay in my marketplace and receive signed payment updates."
+                  rows={4}
+                />
+              </label>
             </div>
-            <label>
-              What are you building?
-              <textarea
-                value={useCase}
-                onChange={(event) => setUseCase(event.target.value)}
-                placeholder="Example: I want to accept ORBI Pay in my marketplace and receive signed payment updates."
-                rows={4}
-              />
-            </label>
+          )}
+
+          {mode === 'signup' && signupStep === 3 && (
+            <div className="auth-step">
+              <div className="signup-review">
+                <div><span>Developer</span><strong>{name}</strong><small>@{username}</small></div>
+                <div><span>Project</span><strong>{companyName}</strong><small>{countryCode}</small></div>
+                <div><span>Email</span><strong>{email}</strong></div>
+              </div>
+              <p className="signup-review-note">Your account starts in sandbox. Production access is requested separately after your integration is ready.</p>
             <label className="checkbox-line">
               <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} />
               <span>I agree to use sandbox safely and request approval before live customer payments.</span>
             </label>
-          </>
+            </div>
+          )}
+
+          {mode === 'signin' && (
+            <div className="auth-step">
+              <label>
+                Email
+                <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@business.com" autoComplete="email" />
+              </label>
+              <label>
+                Password
+                <input
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  placeholder="Your portal password"
+                  type="password"
+                  autoComplete="current-password"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') void submitLogin();
+                  }}
+                />
+              </label>
+              <label>
+                Authenticator code
+                <input
+                  value={otp}
+                  onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="Optional unless MFA is enabled"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                />
+              </label>
+            </div>
+          )}
+
+          {message && <div className={`inline-message ${mode === 'signin' && message.toLowerCase().includes('invalid') ? 'danger' : 'info'}`}>{message}</div>}
+        </div>
+
+        {mode === 'signup' ? (
+          <div className="auth-actions">
+            {signupStep > 1 && (
+              <button className="ghost-action" onClick={() => moveSignup(-1)} disabled={working}>
+                <ArrowLeft size={16} /> Back
+              </button>
+            )}
+            {signupStep < 3 ? (
+              <button className="button-primary" onClick={() => moveSignup(1)}>
+                Next <ArrowRight size={16} />
+              </button>
+            ) : (
+              <button className="button-primary" onClick={submitSignup} disabled={working || !termsAccepted}>
+                {working ? 'Creating account' : 'Create sandbox account'}
+              </button>
+            )}
+          </div>
         ) : (
-          <label>
-            Authenticator code
-            <input
-              value={otp}
-              onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-              placeholder="Optional unless MFA is enabled"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-            />
-          </label>
+          <button className="button-primary full" onClick={submitLogin} disabled={working || !email.trim() || !password}>
+            {working ? 'Signing in' : 'Sign in'}
+          </button>
         )}
-        <button
-          className="button-primary full"
-          onClick={mode === 'signup' ? submitSignup : submitLogin}
-          disabled={working || !email.trim() || !password || (mode === 'signup' && (!name.trim() || !username.trim() || !companyName.trim() || !useCase.trim() || !termsAccepted))}
-        >
-          {working ? (mode === 'signup' ? 'Creating account' : 'Signing in') : mode === 'signup' ? 'Create sandbox account' : 'Sign in'}
-        </button>
-        {message && <div className={`inline-message ${mode === 'signin' && message.toLowerCase().includes('invalid') ? 'danger' : 'info'}`}>{message}</div>}
       </div>
     </div>
   );

@@ -1550,19 +1550,157 @@ tr:last-child td {
   display: grid;
   place-items: center;
   padding: 22px;
+  overflow-y: auto;
 }
 
 .modal-card {
   position: relative;
   width: min(620px, 100%);
+  max-height: calc(100dvh - 44px);
   padding: 32px;
   background: white;
   border-radius: 34px;
   box-shadow: 0 40px 120px rgba(2, 6, 23, 0.28);
+  overflow: hidden;
 }
 
 .auth-card {
+  display: flex;
+  flex-direction: column;
   width: min(520px, 100%);
+}
+
+.auth-form-body {
+  min-height: 0;
+  padding: 2px 4px 4px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #b9cbc5 transparent;
+}
+
+.auth-step {
+  animation: auth-step-in 220ms ease both;
+}
+
+@keyframes auth-step-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.signup-progress {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.signup-progress-copy {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.signup-progress-copy span {
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.signup-progress-copy strong {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.signup-progress-track {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.signup-progress-track i {
+  height: 4px;
+  background: #dce7e3;
+  border-radius: 999px;
+}
+
+.signup-progress-track i.active {
+  background: var(--brand);
+}
+
+.signup-review {
+  display: grid;
+  gap: 1px;
+  overflow: hidden;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.signup-review > div {
+  display: grid;
+  grid-template-columns: 90px minmax(0, 1fr);
+  gap: 3px 12px;
+  padding: 12px 14px;
+  background: #fafcfb;
+}
+
+.signup-review span {
+  grid-row: span 2;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.signup-review strong,
+.signup-review small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.signup-review strong {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.signup-review small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.signup-review-note {
+  margin: 14px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.auth-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.auth-actions .ghost-action,
+.auth-actions .button-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.auth-actions .button-primary {
+  min-width: 132px;
 }
 
 .modal-close {
@@ -2294,6 +2432,45 @@ textarea {
 }
 
 @media (max-width: 760px) {
+  .modal-backdrop {
+    align-items: end;
+    padding: 10px;
+  }
+
+  .modal-card {
+    max-height: calc(100dvh - 20px);
+    padding: 24px 20px 20px;
+    border-radius: 24px;
+  }
+
+  .auth-card .modal-copy {
+    margin: 8px 34px 8px 0;
+    font-size: 13px;
+  }
+
+  .auth-tabs {
+    margin: 12px 0 16px;
+  }
+
+  .auth-tabs button {
+    padding: 10px 8px;
+  }
+
+  .auth-actions {
+    position: sticky;
+    bottom: 0;
+    background: white;
+  }
+
+  .auth-actions .ghost-action,
+  .auth-actions .button-primary {
+    flex: 1;
+  }
+
+  .signup-review > div {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
   .topbar {
     padding: 13px 16px;
   }
