@@ -1093,7 +1093,11 @@ function KeysAndSecrets({ config, state, refresh, openKeyModal }: { config: Port
         ])}
         empty="No integration keys yet."
       />
-      <p className="security-note">Keys are shown once when created. Store them only in your secure server environment.</p>
+      <p className="security-note">
+        Treat ORBI keys like bank credentials. They are shown once only. Store them in your server secret manager or protected
+        environment variables, never in browser code, mobile apps, Git, logs, screenshots, chat messages, or shared documents.
+        If a key is exposed, rotate it immediately.
+      </p>
     </div>
   );
 }
@@ -2459,7 +2463,10 @@ function PortalModal({
           <>
             <p className="eyebrow">One-time secret</p>
             <h2>Issue API Key</h2>
-            <p className="modal-copy">Keys are shown once. Store them only in a secure server environment.</p>
+            <p className="modal-copy">
+              This secret will be shown once only. Put it directly into secure server storage. Do not paste it into frontend
+              code, Git, logs, screenshots, or chat. If it is exposed, rotate it before accepting live payments.
+            </p>
             <label>
               Integration code
               <input value={serviceCode} onChange={(event) => setServiceCode(event.target.value)} placeholder="orbi-shop" />
