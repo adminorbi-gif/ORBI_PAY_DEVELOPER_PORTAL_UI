@@ -2699,6 +2699,7 @@ function AuthModal({
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [countryCode, setCountryCode] = useState('TZ');
   const [useCase, setUseCase] = useState('');
@@ -2723,6 +2724,7 @@ function AuthModal({
     setMessage(undefined);
     const result = await signupPortalDeveloper(config, {
       name,
+      username,
       email,
       password,
       companyName,
@@ -2762,6 +2764,15 @@ function AuthModal({
             <label>
               Full name
               <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" autoComplete="name" />
+            </label>
+            <label>
+              Developer username
+              <input
+                value={username}
+                onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32))}
+                placeholder="example_team"
+                autoComplete="username"
+              />
             </label>
             <label>
               Business or project
@@ -2823,7 +2834,7 @@ function AuthModal({
         <button
           className="button-primary full"
           onClick={mode === 'signup' ? submitSignup : submitLogin}
-          disabled={working || !email.trim() || !password || (mode === 'signup' && (!name.trim() || !companyName.trim() || !useCase.trim() || !termsAccepted))}
+          disabled={working || !email.trim() || !password || (mode === 'signup' && (!name.trim() || !username.trim() || !companyName.trim() || !useCase.trim() || !termsAccepted))}
         >
           {working ? (mode === 'signup' ? 'Creating account' : 'Signing in') : mode === 'signup' ? 'Create sandbox account' : 'Sign in'}
         </button>

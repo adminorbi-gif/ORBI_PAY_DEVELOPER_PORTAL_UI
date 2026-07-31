@@ -16,6 +16,7 @@ export type PortalConfig = {
 
 export type PortalUser = {
   userId?: string;
+  username?: string;
   email: string;
   name: string;
   role: 'developer' | 'operator' | 'admin';
@@ -206,6 +207,7 @@ export async function signupPortalDeveloper(
   config: PortalConfig,
   input: {
     name: string;
+    username: string;
     email: string;
     password: string;
     companyName: string;
