@@ -288,7 +288,7 @@ function roleToAccessLevel(role: PortalRole) {
 
 function isSectionVisibleForRole(section: SectionId, role: PortalRole) {
   if (role === 'public_developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime'].includes(section);
-  if (role === 'developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime', 'scopes', 'webhooks', 'health'].includes(section);
+  if (role === 'developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime', 'keys', 'scopes', 'webhooks', 'health'].includes(section);
   if (role === 'operator') return ['overview', 'services', 'access', 'keys', 'scopes', 'webhooks', 'health', 'incidents', 'events'].includes(section);
   return ['overview', 'services', 'access', 'keys', 'team', 'scopes', 'webhooks', 'health', 'incidents', 'events', 'runtime'].includes(section);
 }
@@ -453,7 +453,7 @@ function SectionRenderer({
   if (section === 'services') return <Services config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'access') return <AccessRequests config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'sandbox') return <SandboxSetup config={config} state={portalState} refresh={refresh} role={role} />;
-  if (section === 'keys') return <KeysAndSecrets config={config} state={portalState} refresh={refresh} openKeyModal={openKeyModal} />;
+  if (section === 'keys') return <KeysAndSecrets config={config} state={portalState} refresh={refresh} openKeyModal={openKeyModal} role={role} />;
   if (section === 'team') return <TeamAccess config={config} state={portalState} refresh={refresh} />;
   if (section === 'scopes') return <ScopesAndConsent config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'webhooks') return <Webhooks config={config} state={portalState} refresh={refresh} />;
@@ -1075,12 +1075,25 @@ function isPublicHttpsUrl(value: string, originOnly = false): boolean {
   }
 }
 
-function KeysAndSecrets({ config, state, refresh, openKeyModal }: { config: PortalConfig; state: PortalState; refresh: () => void; openKeyModal: () => void }) {
+function KeysAndSecrets({
+  config,
+  state,
+  refresh,
+  openKeyModal,
+  role,
+}: {
+  config: PortalConfig;
+  state: PortalState;
+  refresh: () => void;
+  openKeyModal: () => void;
+  role: PortalRole;
+}) {
   const services = state.snapshot?.services || [];
+  const canCreateKeys = roleCanManageServices(role);
 
   return (
     <div className="panel wide-panel">
-      <PanelHeader title="Integration Keys" action="Create key" onAction={openKeyModal} />
+      <PanelHeader title="Integration Keys" action={canCreateKeys ? 'Create key' : undefined} onAction={canCreateKeys ? openKeyModal : undefined} />
       <DataTable
         columns={['Integration', 'Status', 'API key', 'Payment update key', 'Environments', 'Actions']}
         rows={services.map((service) => [
@@ -1089,7 +1102,7 @@ function KeysAndSecrets({ config, state, refresh, openKeyModal }: { config: Port
           String(valueOf(service, 'keyStatus', 'key_status') || 'Not available'),
           String(valueOf(service, 'webhookSecretStatus', 'webhook_secret_status') || 'Not available'),
           arrayValue(service, 'environments').join(', ') || '-',
-          <SecretActions config={config} serviceCode={String(service.serviceCode || service.code || '')} refresh={refresh} />,
+          <SecretActions config={config} serviceCode={String(service.serviceCode || service.code || '')} refresh={refresh} role={role} />,
         ])}
         empty="No integration keys yet."
       />
@@ -1250,23 +1263,61 @@ function AuthenticatorQr({ setup }: { setup: { otpauthUri: string; secret: strin
   );
 }
 
-function SecretActions({ config, serviceCode, refresh }: { config: PortalConfig; serviceCode: string; refresh: () => void }) {
+function SecretActions({ config, serviceCode, refresh, role }: { config: PortalConfig; serviceCode: string; refresh: () => void; role: PortalRole }) {
   const [message, setMessage] = useState<string>();
+  const [oneTimeSecret, setOneTimeSecret] = useState<string>();
   const [working, setWorking] = useState(false);
+  const canIssueSecrets = roleCanManageServices(role);
+  const sessionEmail = readStoredPortalSession()?.user.email || 'developer';
 
   const call = async (path: string, body: Record<string, unknown>, success: string) => {
     const reason = String(body.reason || body.rotationReason || 'Controlled key action from Developer Portal.');
     if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setWorking(true);
-    const result = await gatewayRequest(config, path, 'operator', {
+    setOneTimeSecret(undefined);
+    const result = await gatewayRequest<Record<string, unknown>>(config, path, 'operator', {
       method: 'POST',
       portalConfirmationAccepted: true,
       portalReason: reason,
       body: JSON.stringify(body),
     });
-    setMessage(result.ok ? success : result.error);
+    if (result.ok) {
+      const secret = String(result.data?.oneTimeSecret || '');
+      if (secret) setOneTimeSecret(secret);
+      setMessage(success);
+    } else {
+      setMessage(result.error);
+    }
     setWorking(false);
     if (result.ok) refresh();
+  };
+
+  const emergencyRotate = () => {
+    const reason = window.prompt(
+      'Why do you need emergency rotation?',
+      'Suspected API key exposure. Rotate the integration key now.',
+    );
+    if (!reason?.trim() || reason.trim().length < 10) {
+      setMessage('Add a clear reason before emergency rotation.');
+      return;
+    }
+    const revokeNow = window.confirm(
+      'If this key is exposed, revoke the old active key immediately.\n\nChoose OK to revoke now. Choose Cancel for a short cutover window.',
+    );
+    void call(`/v1/developer/services/${encodeURIComponent(serviceCode)}/api-keys/emergency-rotate`, {
+      environment: config.environment,
+      requestedBy: sessionEmail,
+      reason: reason.trim(),
+      exposureType: revokeNow ? 'confirmed_exposure' : 'suspected_exposure',
+      revokePreviousImmediately: revokeNow,
+      overlapMinutes: revokeNow ? 0 : config.environment === 'live' ? 15 : 30,
+      metadata: {
+        requestedFrom: 'developer_portal',
+        action: 'emergency_api_key_rotation',
+      },
+    }, revokeNow
+      ? 'Emergency key rotated. Old active key was revoked.'
+      : 'Emergency key rotated. Old active key is in short cutover.');
   };
 
   return (
@@ -1276,23 +1327,38 @@ function SecretActions({ config, serviceCode, refresh }: { config: PortalConfig;
         disabled={!serviceCode || working}
         onClick={() => call(`/v1/developer/services/${encodeURIComponent(serviceCode)}/api-key-rotations`, {
           environment: config.environment,
-          requestedBy: 'operator@orbifinancial.com',
+          requestedBy: sessionEmail,
           rotationReason: 'Routine controlled API key rotation from Developer Portal.',
         }, 'API key rotation requested.')}
       >
         Rotate key
       </button>
       <button
-        className="ghost-action"
+        className="ghost-action danger-action"
         disabled={!serviceCode || working}
-        onClick={() => call(`/v1/developer/services/${encodeURIComponent(serviceCode)}/webhook-secrets/issue`, {
-          environment: config.environment,
-          requestedBy: 'operator@orbifinancial.com',
-          reason: 'Issue webhook signing secret from Developer Portal.',
-        }, 'Payment update key created.')}
+        onClick={emergencyRotate}
       >
-        Create update key
+        Emergency rotate
       </button>
+      {canIssueSecrets && (
+        <button
+          className="ghost-action"
+          disabled={!serviceCode || working}
+          onClick={() => call(`/v1/developer/services/${encodeURIComponent(serviceCode)}/webhook-secrets/issue`, {
+            environment: config.environment,
+            requestedBy: sessionEmail,
+            reason: 'Issue webhook signing secret from Developer Portal.',
+          }, 'Payment update key created.')}
+        >
+          Create update key
+        </button>
+      )}
+      {oneTimeSecret && (
+        <div className="secret-preview compact">
+          <strong>Copy this new key now. It will not be shown again.</strong>
+          <Copyable value={oneTimeSecret} />
+        </div>
+      )}
       {message && <small>{message}</small>}
     </div>
   );
