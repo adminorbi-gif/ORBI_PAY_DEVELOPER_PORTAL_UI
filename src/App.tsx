@@ -1386,19 +1386,20 @@ function Health({ state }: { state: PortalState }) {
 function OperatorIncidents({ config, state, refresh }: { config: PortalConfig; state: PortalState; refresh: () => void }) {
   const incidents = state.snapshot?.incidents || [];
   const openCount = incidents.filter((incident) => String(incident.status || '').toLowerCase() !== 'resolved').length;
-  const criticalCount = incidents.filter((incident) => String(incident.severity || '').toLowerCase() === 'critical' && String(incident.status || '').toLowerCase() !== 'resolved').length;
+  const highPriorityCount = incidents.filter((incident) => String(incident.severity || '').toLowerCase() === 'critical' && String(incident.status || '').toLowerCase() !== 'resolved').length;
+  const escalatedCount = incidents.filter((incident) => Boolean(incident.escalatedAt) && String(incident.status || '').toLowerCase() !== 'resolved').length;
 
   return (
     <div className="stack">
       <div className="dashboard-grid">
-        <MetricCard label="Open incidents" value={String(openCount)} tone={openCount ? 'danger' : 'success'} detail={openCount ? 'Needs operator action' : 'Queue is clear'} />
-        <MetricCard label="Critical" value={String(criticalCount)} tone={criticalCount ? 'danger' : 'success'} detail="High priority reconciliation or runtime events" />
-        <MetricCard label="Resolved" value={String(incidents.length - openCount)} tone="info" detail="Closed with operator resolution" />
-        <MetricCard label="Source" value="Gateway" tone="neutral" detail="Monitored operator queue" />
+        <MetricCard label="Needs attention" value={String(openCount)} tone={openCount ? 'danger' : 'success'} detail={openCount ? 'Review these before customers are affected.' : 'Everything is clear.'} />
+        <MetricCard label="High priority" value={String(highPriorityCount)} tone={highPriorityCount ? 'danger' : 'success'} detail="Payment or account checks that need fast review." />
+        <MetricCard label="Past target time" value={String(escalatedCount)} tone={escalatedCount ? 'warning' : 'success'} detail="Items that waited longer than the response target." />
+        <MetricCard label="Fixed" value={String(incidents.length - openCount)} tone="info" detail="Closed by the support or operations team." />
       </div>
 
       <div className="panel wide-panel">
-        <PanelHeader title="Operator Incident Queue" action="Refresh" onAction={refresh} />
+        <PanelHeader title="Service issues" action="Refresh" onAction={refresh} />
         {incidents.length ? (
           <div className="incident-list">
             {incidents.map((incident) => (
@@ -1406,7 +1407,7 @@ function OperatorIncidents({ config, state, refresh }: { config: PortalConfig; s
             ))}
           </div>
         ) : (
-          <EmptyState title="No incidents open" detail="Reconciliation and runtime alerts will appear here when operator action is required." />
+          <EmptyState title="No service issues" detail="If a payment update, account check, or integration needs help, it will appear here." />
         )}
       </div>
     </div>
@@ -1424,13 +1425,18 @@ function IncidentCard({ config, incident, refresh }: { config: PortalConfig; inc
   const runbook = incident.runbook || {};
   const runbookSteps = Array.isArray(runbook.steps) ? runbook.steps : [];
   const actorEmail = readStoredPortalSession()?.user.email || 'portal-operator';
+  const statusLabel = incidentStatusLabel(status);
+  const severityLabel = incidentSeverityLabel(severity);
+  const incidentTitle = incidentTitleLabel(incident);
+  const incidentMessage = incidentMessageLabel(incident);
+  const responseTarget = incident.escalatedAt ? `Past target: ${new Date(String(incident.escalatedAt)).toLocaleString()}` : 'Within response target';
 
   const callIncidentAction = async (
     action: 'acknowledge' | 'assign' | 'resolve',
     label: string,
     body: Record<string, unknown>,
   ) => {
-    const reason = `${label} incident ${incidentId}.`;
+    const reason = `${label} service issue ${incidentId}.`;
     if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setWorking(action);
     setMessage(undefined);
@@ -1441,29 +1447,29 @@ function IncidentCard({ config, incident, refresh }: { config: PortalConfig; inc
       body: JSON.stringify(body),
     });
     setWorking(undefined);
-    setMessage(result.ok ? `${label} completed.` : result.error);
+    setMessage(result.ok ? `${label} done.` : result.error);
     if (result.ok) refresh();
   };
 
-  const acknowledge = () => callIncidentAction('acknowledge', 'Acknowledge', {
+  const acknowledge = () => callIncidentAction('acknowledge', 'Start review', {
     acknowledgedBy: actorEmail,
-    note: 'Incident acknowledged from Developer Portal.',
+    note: 'Service issue review started from Developer Portal.',
   });
 
   const assign = () => {
-    const assignedTo = window.prompt('Assign to who?', 'recon-team@orbifinancial.com');
+    const assignedTo = window.prompt('Who should handle this?', 'support@orbifinancial.com');
     if (!assignedTo?.trim()) return;
-    void callIncidentAction('assign', 'Assign', {
+    void callIncidentAction('assign', 'Assign owner', {
       assignedTo: assignedTo.trim(),
       assignedBy: actorEmail,
-      note: 'Assigned from Developer Portal.',
+      note: 'Owner assigned from Developer Portal.',
     });
   };
 
   const resolve = () => {
-    const resolution = window.prompt('Resolution note');
+    const resolution = window.prompt('What fixed it?');
     if (!resolution?.trim()) return;
-    void callIncidentAction('resolve', 'Resolve', {
+    void callIncidentAction('resolve', 'Mark fixed', {
       resolvedBy: actorEmail,
       resolution: resolution.trim(),
     });
@@ -1473,21 +1479,22 @@ function IncidentCard({ config, incident, refresh }: { config: PortalConfig; inc
     <div className={`incident-card ${severity} ${status}`}>
       <div className="incident-main">
         <div className="incident-title-row">
-          <StatusPill tone={severity === 'critical' ? 'danger' : 'warning'}>{severity}</StatusPill>
-          <StatusPill tone={toneFromStatus(status)}>{status}</StatusPill>
+          <StatusPill tone={severity === 'critical' ? 'danger' : 'warning'}>{severityLabel}</StatusPill>
+          <StatusPill tone={toneFromStatus(status)}>{statusLabel}</StatusPill>
+          {incident.escalatedAt && <StatusPill tone="warning">Past target time</StatusPill>}
           <span>{incident.createdAt ? new Date(String(incident.createdAt)).toLocaleString() : 'Time unavailable'}</span>
         </div>
-        <h3>{String(incident.title || incident.incidentType || 'Operator incident')}</h3>
-        <p>{String(incident.message || 'No incident message returned.')}</p>
+        <h3>{incidentTitle}</h3>
+        <p>{incidentMessage}</p>
         <div className="incident-meta-grid">
-          <InfoLine label="Incident ID" value={incidentId || '-'} />
-          <InfoLine label="Type" value={String(incident.incidentType || '-')} />
-          <InfoLine label="Resource" value={String(resource.id || resource.type || '-')} />
-          <InfoLine label="Exceptions" value={String(metadata.exceptionCount || '-')} />
+          <InfoLine label="Issue ID" value={incidentId || '-'} />
+          <InfoLine label="Area" value={incidentAreaLabel(incident)} />
+          <InfoLine label="Related item" value={String(resource.id || resource.type || '-')} />
+          <InfoLine label="Response target" value={responseTarget} />
         </div>
         {runbookSteps.length > 0 && (
           <div className="runbook-box">
-            <strong>{String(runbook.name || 'Runbook')}</strong>
+            <strong>What to check</strong>
             {runbookSteps.slice(0, 5).map((step, index) => (
               <span key={`${incidentId}-step-${index}`}>{index + 1}. {step}</span>
             ))}
@@ -1498,13 +1505,13 @@ function IncidentCard({ config, incident, refresh }: { config: PortalConfig; inc
       <div className="incident-actions">
         <Copyable value={incidentId || '-'} />
         <button className="ghost-action" disabled={!incidentId || status === 'resolved' || working === 'acknowledge'} onClick={acknowledge}>
-          Acknowledge
+          Start review
         </button>
         <button className="ghost-action" disabled={!incidentId || status === 'resolved' || working === 'assign'} onClick={assign}>
-          Assign
+          Assign owner
         </button>
         <button className="button-primary inline-link" disabled={!incidentId || status === 'resolved' || working === 'resolve'} onClick={resolve}>
-          Resolve
+          Mark fixed
         </button>
       </div>
     </div>
@@ -2421,12 +2428,73 @@ function PortalModal({
   );
 }
 
+function incidentStatusLabel(status: unknown): string {
+  const value = String(status || '').toLowerCase();
+  if (value === 'open') return 'Needs attention';
+  if (value === 'acknowledged') return 'Being reviewed';
+  if (value === 'assigned') return 'Owner assigned';
+  if (value === 'resolved') return 'Fixed';
+  return readableLabel(value || 'needs_attention');
+}
+
+function incidentSeverityLabel(severity: unknown): string {
+  const value = String(severity || '').toLowerCase();
+  if (value === 'critical') return 'High priority';
+  if (value === 'warning') return 'Review';
+  return readableLabel(value || 'review');
+}
+
+function incidentAreaLabel(incident: OperatorIncident): string {
+  const type = String(incident.incidentType || '').toLowerCase();
+  if (type.includes('webhook')) return 'Payment update delivery';
+  if (type.includes('reconciliation')) return 'Balance matching';
+  if (type.includes('settlement')) return 'Payment settlement';
+  if (type.includes('auth')) return 'Login or access';
+  if (type.includes('risk')) return 'Safety review';
+  if (type.includes('runtime')) return 'Gateway availability';
+  return readableLabel(type || 'service_check');
+}
+
+function incidentTitleLabel(incident: OperatorIncident): string {
+  const title = String(incident.title || '').trim();
+  if (title && !title.includes('_')) return title;
+
+  const type = String(incident.incidentType || '').toLowerCase();
+  if (type.includes('webhook')) return 'Payment update needs attention';
+  if (type.includes('reconciliation')) return 'Balance check needs attention';
+  if (type.includes('settlement')) return 'Payment settlement needs attention';
+  if (type.includes('auth')) return 'Access check needs attention';
+  if (type.includes('risk')) return 'Safety review needs attention';
+  return 'Service issue needs attention';
+}
+
+function incidentMessageLabel(incident: OperatorIncident): string {
+  const message = String(incident.message || '').trim();
+  if (message && !message.includes('_')) return message;
+
+  const type = String(incident.incidentType || '').toLowerCase();
+  if (type.includes('webhook')) return 'A merchant payment update did not finish cleanly. Check the delivery and replay it if needed.';
+  if (type.includes('reconciliation')) return 'A balance or payment record needs review before it is marked complete.';
+  if (type.includes('settlement')) return 'A payment step needs review before the merchant or customer sees a final result.';
+  if (type.includes('auth')) return 'A login or permission check needs review.';
+  if (type.includes('risk')) return 'A safety rule asked for human review before continuing.';
+  return 'This item needs review from the support or operations team.';
+}
+
+function readableLabel(value: string): string {
+  return value
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function toneFromStatus(status: unknown): StatusTone {
   const value = String(status || '').toLowerCase();
   if (['live_npm', 'live_pypi', 'live_packagist', 'live', 'published'].includes(value)) return 'success';
   if (['release_ready', 'source_ready', 'bootstrap_available'].includes(value)) return 'info';
-  if (['active', 'ready', 'delivered', 'completed', 'approved'].includes(value)) return 'success';
-  if (['pending', 'pending_review', 'requires_action', 'draft', 'processing'].includes(value)) return 'warning';
+  if (['active', 'ready', 'delivered', 'completed', 'approved', 'resolved'].includes(value)) return 'success';
+  if (['pending', 'pending_review', 'requires_action', 'draft', 'processing', 'open', 'acknowledged', 'assigned'].includes(value)) return 'warning';
   if (['failed', 'rejected', 'suspended', 'revoked'].includes(value)) return 'danger';
   if (['sandbox', 'live'].includes(value)) return 'info';
   return 'neutral';

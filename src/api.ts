@@ -94,6 +94,8 @@ export type OperatorIncident = Record<string, unknown> & {
   resolvedBy?: string;
   resolvedAt?: string;
   resolution?: string;
+  escalatedAt?: string;
+  escalationLevel?: string;
   createdAt?: string;
   updatedAt?: string;
 };
