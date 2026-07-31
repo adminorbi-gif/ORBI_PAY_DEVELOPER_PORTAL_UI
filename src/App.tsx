@@ -1488,7 +1488,7 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
   const loadOwnMfa = async () => {
     setMessage(undefined);
     try {
-      const url = new URL(`${config.bffBaseUrl}/auth/mfa`, window.location.origin);
+      const url = new URL(`${config.bffBaseUrl}/auth/mfa/status`, window.location.origin);
       url.searchParams.set('environment', config.environment);
       const response = await fetch(url, {
         headers: {
