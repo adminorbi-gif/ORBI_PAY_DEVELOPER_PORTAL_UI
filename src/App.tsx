@@ -24,10 +24,14 @@ import {
   logoutPortal,
   readStoredPortalSession,
   signupPortalDeveloper,
+  startPortalMfaEnrollment,
+  stepUpPortalMfa,
   validatePortalSession,
+  verifyPortalMfaEnrollment,
   type DeveloperEvent,
   type PortalConfig,
   type PortalSession,
+  type MfaEnrollmentSetup,
   type PortalUser,
   type PortalSnapshot,
   type OperatorIncident,
@@ -111,6 +115,7 @@ export function App() {
   const [modal, setModal] = useState<'service' | 'key' | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [mfaStepUpOpen, setMfaStepUpOpen] = useState(false);
   const [portalState, setPortalState] = useState<PortalState>({ loading: true, errors: [] });
 
   const config = useMemo(() => ({ ...getPortalConfig(environment), sessionToken: session?.token }), [environment, session?.token]);
@@ -132,6 +137,12 @@ export function App() {
     };
     window.addEventListener('orbi-open-signup', openSignup);
     return () => window.removeEventListener('orbi-open-signup', openSignup);
+  }, []);
+
+  useEffect(() => {
+    const openStepUp = () => setMfaStepUpOpen(true);
+    window.addEventListener('orbi-mfa-step-up-required', openStepUp);
+    return () => window.removeEventListener('orbi-mfa-step-up-required', openStepUp);
   }, []);
 
   useEffect(() => {
@@ -285,6 +296,26 @@ export function App() {
             setSession(nextSession);
             setAuthOpen(false);
             setSection(roleCanManageServices(nextSession.user.role) ? 'overview' : 'sandbox');
+          }}
+        />
+      )}
+      {session?.user.mfaRequired && session.user.mfaStatus !== 'active' && (
+        <MfaEnrollmentModal
+          config={config}
+          onCompleted={(verifiedSession) => {
+            setSession(verifiedSession);
+            void loadPortal();
+          }}
+          onSignOut={signOut}
+        />
+      )}
+      {session && mfaStepUpOpen && (
+        <MfaStepUpModal
+          config={config}
+          onClose={() => setMfaStepUpOpen(false)}
+          onVerified={(verifiedSession) => {
+            setSession(verifiedSession);
+            setMfaStepUpOpen(false);
           }}
         />
       )}
@@ -1452,7 +1483,6 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
   const [mfaRequired, setMfaRequired] = useState(true);
   const [liveAccess, setLiveAccess] = useState(false);
   const [message, setMessage] = useState<string>();
-  const [mfaSetup, setMfaSetup] = useState<{ otpauthUri: string; secret: string }>();
   const [working, setWorking] = useState(false);
 
   const loadOwnMfa = async () => {
@@ -1471,7 +1501,7 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
         setMessage(String(body?.error || `MFA setup failed with HTTP ${response.status}`));
         return;
       }
-      setMfaSetup(body.data);
+      setMessage(`MFA status: ${String(body?.data?.status || 'not configured')}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load authenticator setup.');
     }
@@ -1495,7 +1525,6 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
       const body = await response.json().catch(() => null);
       setMessage(response.ok ? 'Portal account created.' : String(body?.error || `Request failed with HTTP ${response.status}`));
       if (response.ok) {
-        if (body?.data?.mfaSetup?.otpauthUri) setMfaSetup(body.data.mfaSetup);
         setEmail('');
         setName('');
         setPassword('');
@@ -1535,9 +1564,8 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
         <button className="button-primary inline-link" disabled={working || !email || !password || !name} onClick={createUser}>
           {working ? 'Creating' : 'Create account'}
         </button>
-        <button className="ghost-action inline-link" onClick={loadOwnMfa}>Show my QR setup</button>
+        <button className="ghost-action inline-link" onClick={loadOwnMfa}>Check my MFA status</button>
         {message && <div className="inline-message">{message}</div>}
-        {mfaSetup && <AuthenticatorQr setup={mfaSetup} />}
       </div>
 
       <div className="panel wide-panel">
@@ -1585,6 +1613,139 @@ function AuthenticatorQr({ setup }: { setup: { otpauthUri: string; secret: strin
         <p>Open Google Authenticator, Microsoft Authenticator, Authy, 2FAS, or Aegis and scan this QR code.</p>
         <Copyable value={setup.secret} />
         <small>Use the manual key only if QR scan is not available.</small>
+      </div>
+    </div>
+  );
+}
+
+function MfaEnrollmentModal({
+  config,
+  onCompleted,
+  onSignOut,
+}: {
+  config: PortalConfig;
+  onCompleted: (session: PortalSession) => void;
+  onSignOut: () => void;
+}) {
+  const [setup, setSetup] = useState<MfaEnrollmentSetup>();
+  const [code, setCode] = useState('');
+  const [message, setMessage] = useState<string>();
+  const [working, setWorking] = useState(false);
+
+  const begin = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    const result = await startPortalMfaEnrollment(config);
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    setSetup(result.data);
+  };
+
+  const verify = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    const result = await verifyPortalMfaEnrollment(config, code);
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    onCompleted(result.data);
+  };
+
+  return (
+    <div className="modal-backdrop mfa-enrollment-backdrop" role="dialog" aria-modal="true" aria-labelledby="mfa-enrollment-title">
+      <div className="modal-card mfa-enrollment-card">
+        <p className="eyebrow">Account security</p>
+        <h2 id="mfa-enrollment-title">Protect your ORBI account</h2>
+        <p className="modal-copy">
+          Your role requires multi-factor authentication. Set up an authenticator before accessing protected portal actions.
+        </p>
+        {!setup ? (
+          <div className="mfa-enrollment-intro">
+            <div className="security-step"><span>1</span><p>Install Google Authenticator, Microsoft Authenticator, 2FAS, Authy, or Aegis.</p></div>
+            <div className="security-step"><span>2</span><p>Scan the secure QR code generated for this account.</p></div>
+            <div className="security-step"><span>3</span><p>Enter the current 6-digit code to activate MFA.</p></div>
+            <button className="button-primary full" onClick={begin} disabled={working}>
+              {working ? 'Preparing secure setup' : 'Set up authenticator'}
+            </button>
+          </div>
+        ) : (
+          <>
+            <AuthenticatorQr setup={setup} />
+            <label>
+              6-digit authenticator code
+              <input
+                value={code}
+                onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="000000"
+              />
+            </label>
+            <button className="button-primary full" onClick={verify} disabled={working || code.length !== 6}>
+              {working ? 'Verifying' : 'Verify and continue'}
+            </button>
+          </>
+        )}
+        {message && <div className="inline-message danger">{message}</div>}
+        <button className="mini-link mfa-signout" onClick={onSignOut}>Sign out and finish later</button>
+      </div>
+    </div>
+  );
+}
+
+function MfaStepUpModal({
+  config,
+  onClose,
+  onVerified,
+}: {
+  config: PortalConfig;
+  onClose: () => void;
+  onVerified: (session: PortalSession) => void;
+}) {
+  const [code, setCode] = useState('');
+  const [message, setMessage] = useState<string>();
+  const [working, setWorking] = useState(false);
+
+  const verify = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    const result = await stepUpPortalMfa(config, code);
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    onVerified(result.data);
+  };
+
+  return (
+    <div className="modal-backdrop mfa-enrollment-backdrop" role="dialog" aria-modal="true" aria-labelledby="mfa-step-up-title">
+      <div className="modal-card auth-card">
+        <button className="icon-button modal-close" onClick={onClose} aria-label="Close verification">
+          <X size={20} />
+        </button>
+        <p className="eyebrow">Security check</p>
+        <h2 id="mfa-step-up-title">Verify this sensitive action</h2>
+        <p className="modal-copy">Enter a new code from your authenticator. Each code can be used only once.</p>
+        <label>
+          6-digit authenticator code
+          <input
+            value={code}
+            onChange={(event) => setCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            placeholder="000000"
+          />
+        </label>
+        <button className="button-primary full" onClick={verify} disabled={working || code.length !== 6}>
+          {working ? 'Verifying' : 'Verify'}
+        </button>
+        {message && <div className="inline-message danger">{message}</div>}
       </div>
     </div>
   );

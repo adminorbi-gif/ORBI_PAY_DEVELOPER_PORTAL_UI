@@ -24,6 +24,7 @@ export type PortalUser = {
   liveAccess?: boolean;
   serviceCodes?: string[];
   mfaRequired?: boolean;
+  mfaStatus?: 'disabled' | 'pending' | 'active';
   enabled?: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -33,6 +34,13 @@ export type PortalSession = {
   token: string;
   user: PortalUser;
   expiresAt?: string;
+  mfaEnrollmentRequired?: boolean;
+};
+
+export type MfaEnrollmentSetup = {
+  otpauthUri: string;
+  secret: string;
+  status: 'pending';
 };
 
 export type ServiceRecord = Record<string, unknown> & {
@@ -217,6 +225,73 @@ export async function loginPortalWithOtp(config: PortalConfig, email: string, pa
   }
 }
 
+export async function startPortalMfaEnrollment(config: PortalConfig): Promise<GatewayResult<MfaEnrollmentSetup>> {
+  try {
+    const response = await fetch(`${config.bffBaseUrl}/auth/mfa/enroll`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
+      },
+      body: JSON.stringify({ environment: config.environment }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `MFA setup failed with HTTP ${response.status}`), detail: body };
+    }
+    return { ok: true, data: unwrapGatewayEnvelope<MfaEnrollmentSetup>(body) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Unable to start MFA setup.', detail: error };
+  }
+}
+
+export async function verifyPortalMfaEnrollment(config: PortalConfig, code: string): Promise<GatewayResult<PortalSession>> {
+  try {
+    const response = await fetch(`${config.bffBaseUrl}/auth/mfa/verify`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
+      },
+      body: JSON.stringify({ code, environment: config.environment }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `MFA verification failed with HTTP ${response.status}`), detail: body };
+    }
+    const session = unwrapGatewayEnvelope<PortalSession>(body);
+    storePortalSession(session);
+    return { ok: true, data: session };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Unable to verify MFA.', detail: error };
+  }
+}
+
+export async function stepUpPortalMfa(config: PortalConfig, code: string): Promise<GatewayResult<PortalSession>> {
+  try {
+    const response = await fetch(`${config.bffBaseUrl}/auth/mfa/step-up`, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
+      },
+      body: JSON.stringify({ code, environment: config.environment }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `MFA verification failed with HTTP ${response.status}`), detail: body };
+    }
+    const session = unwrapGatewayEnvelope<PortalSession>(body);
+    storePortalSession(session);
+    return { ok: true, data: session };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Unable to refresh MFA verification.', detail: error };
+  }
+}
+
 export async function signupPortalDeveloper(
   config: PortalConfig,
   input: {
@@ -318,10 +393,14 @@ export async function gatewayRequest<T>(
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
+      const error = String(body?.error || body?.message || `Portal BFF returned HTTP ${response.status}`);
+      if (response.status === 403 && error.toLowerCase().includes('fresh mfa')) {
+        window.dispatchEvent(new CustomEvent('orbi-mfa-step-up-required'));
+      }
       return {
         ok: false,
         status: response.status,
-        error: String(body?.error || body?.message || `Portal BFF returned HTTP ${response.status}`),
+        error,
         detail: body,
       };
     }

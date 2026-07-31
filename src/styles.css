@@ -1703,6 +1703,64 @@ tr:last-child td {
   min-width: 132px;
 }
 
+.mfa-enrollment-backdrop {
+  z-index: 80;
+}
+
+.mfa-enrollment-card {
+  width: min(590px, 100%);
+}
+
+.mfa-enrollment-intro {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.security-step {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  background: #f6faf8;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.security-step span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  color: white;
+  background: var(--brand);
+  border-radius: 10px;
+  font-weight: 700;
+}
+
+.security-step p {
+  margin: 0;
+  color: #3f514b;
+  font-size: 13px;
+}
+
+.mfa-enrollment-card .qr-setup {
+  margin: 18px 0;
+}
+
+.mfa-enrollment-card input {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 20px;
+  letter-spacing: 0.2em;
+  text-align: center;
+}
+
+.mfa-signout {
+  align-self: center;
+  margin: 14px auto 0;
+}
+
 .modal-close {
   position: absolute;
   top: 18px;
