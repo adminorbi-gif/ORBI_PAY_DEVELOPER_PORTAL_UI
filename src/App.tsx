@@ -48,7 +48,7 @@ const titleFor: Record<SectionId, string> = {
   scopes: 'Permissions',
   webhooks: 'Payment Updates',
   health: 'System Checks',
-  incidents: 'Incidents',
+  incidents: 'Service Issues',
   docs: 'Docs & SDKs',
   events: 'Activity Logs',
   runtime: 'SDK Setup',
