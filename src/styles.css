@@ -691,6 +691,89 @@ a {
   font-weight: 800;
 }
 
+.developer-landing {
+  display: grid;
+  grid-template-columns: minmax(0, 1.18fr) minmax(300px, 0.82fr);
+  gap: 20px;
+  padding: clamp(24px, 4vw, 42px);
+  color: white;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(134, 239, 172, 0.28), transparent 30%),
+    linear-gradient(135deg, #052e2b 0%, #0f766e 54%, #022c22 100%);
+  border-radius: 34px;
+  box-shadow: 0 28px 80px rgba(15, 118, 110, 0.26);
+  overflow: hidden;
+}
+
+.developer-landing-copy h2 {
+  max-width: 780px;
+  margin: 8px 0 14px;
+  font-size: clamp(36px, 6vw, 72px);
+  line-height: 0.94;
+  letter-spacing: -0.075em;
+}
+
+.developer-landing-copy p {
+  max-width: 780px;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: clamp(16px, 2vw, 20px);
+  line-height: 1.58;
+  font-weight: 700;
+}
+
+.landing-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.landing-actions span {
+  max-width: 360px;
+  color: rgba(255, 255, 255, 0.72);
+  font-weight: 800;
+}
+
+.developer-benefits {
+  display: grid;
+  gap: 12px;
+  align-content: center;
+}
+
+.benefit-card {
+  display: flex;
+  gap: 12px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 22px;
+  backdrop-filter: blur(16px);
+}
+
+.benefit-card svg {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #86efac;
+}
+
+.benefit-card strong,
+.benefit-card span {
+  display: block;
+}
+
+.benefit-card strong {
+  margin-bottom: 4px;
+}
+
+.benefit-card span {
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
 .panel-header,
 .profile-hero {
   display: flex;
@@ -1475,7 +1558,8 @@ label {
 }
 
 input,
-select {
+select,
+textarea {
   width: 100%;
   padding: 14px 15px;
   color: var(--ink);
@@ -1483,12 +1567,58 @@ select {
   border: 1px solid var(--line);
   border-radius: 16px;
   outline: none;
+  font: inherit;
 }
 
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   border-color: var(--brand);
   box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.12);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 112px;
+}
+
+.auth-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 6px;
+  margin: 18px 0;
+  background: #eef7f4;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+}
+
+.auth-tabs button {
+  padding: 12px 14px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 14px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.auth-tabs button.active {
+  color: var(--ink);
+  background: white;
+  box-shadow: 0 12px 28px rgba(2, 6, 23, 0.08);
+}
+
+.checkbox-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.42;
+}
+
+.checkbox-line input {
+  width: auto;
+  margin-top: 3px;
 }
 
 .secret-preview {
@@ -1544,6 +1674,7 @@ select:focus {
 
   .dashboard-grid,
   .command-strip,
+  .developer-landing,
   .docs-grid,
   .endpoint-grid,
   .method-grid,
@@ -1574,6 +1705,7 @@ select:focus {
 
   .dashboard-grid,
   .command-strip,
+  .developer-landing,
   .detail-grid,
   .two-column,
   .docs-grid,

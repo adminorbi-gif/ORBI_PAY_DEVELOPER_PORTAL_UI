@@ -22,6 +22,7 @@ import {
   loginPortalWithOtp,
   logoutPortal,
   readStoredPortalSession,
+  signupPortalDeveloper,
   validatePortalSession,
   type DeveloperEvent,
   type PortalConfig,
@@ -107,6 +108,7 @@ export function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<'service' | 'key' | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [portalState, setPortalState] = useState<PortalState>({ loading: true, errors: [] });
 
   const config = useMemo(() => ({ ...getPortalConfig(environment), sessionToken: session?.token }), [environment, session?.token]);
@@ -120,6 +122,15 @@ export function App() {
   useEffect(() => {
     void loadPortal();
   }, [config.baseUrl, config.bffBaseUrl, config.environment, config.sessionToken]);
+
+  useEffect(() => {
+    const openSignup = () => {
+      setAuthMode('signup');
+      setAuthOpen(true);
+    };
+    window.addEventListener('orbi-open-signup', openSignup);
+    return () => window.removeEventListener('orbi-open-signup', openSignup);
+  }, []);
 
   useEffect(() => {
     if (!session?.token) return;
@@ -195,7 +206,10 @@ export function App() {
           {session ? (
             <button className="mini-link" onClick={signOut}>Logout</button>
           ) : (
-            <button className="mini-link" onClick={() => setAuthOpen(true)}>Login</button>
+            <button className="mini-link" onClick={() => {
+              setAuthMode('signin');
+              setAuthOpen(true);
+            }}>Login</button>
           )}
         </div>
       </aside>
@@ -219,9 +233,12 @@ export function App() {
               <span>New Integration</span>
             </button>
           ) : role === 'public_developer' ? (
-            <button className="primary-action" onClick={() => setAuthOpen(true)}>
+            <button className="primary-action" onClick={() => {
+              setAuthMode('signup');
+              setAuthOpen(true);
+            }}>
               <ArrowRight size={18} />
-              <span>Sign in</span>
+              <span>Create account</span>
             </button>
           ) : (
             <button className="primary-action" onClick={() => navigate('sandbox')}>
@@ -260,6 +277,7 @@ export function App() {
       {authOpen && (
         <AuthModal
           config={config}
+          initialMode={authMode}
           onClose={() => setAuthOpen(false)}
           onSignedIn={(nextSession) => {
             setSession(nextSession);
@@ -487,6 +505,41 @@ function Overview({ role, state }: { role: PortalRole; state: PortalState }) {
 
   return (
     <div className="stack">
+      {!isStaff && (
+        <div className="developer-landing">
+          <div className="developer-landing-copy">
+            <p className="eyebrow">ORBI Business Integration</p>
+            <h2>Create accounts and start your development with ORBI.</h2>
+            <p>
+              Build payments, escrow, identity checks, payment profiles, and signed webhooks on top of ORBI Pay.
+              Start safely in sandbox, then request production access when your service is ready for real customers.
+            </p>
+            <div className="landing-actions">
+              <button className="button-primary inline-link" onClick={() => window.dispatchEvent(new CustomEvent('orbi-open-signup'))}>
+                <ArrowRight size={17} />
+                Create developer account
+              </button>
+              <span>Official SDKs for Node.js, Python, and PHP are ready for integration.</span>
+            </div>
+          </div>
+          <div className="developer-benefits">
+            {[
+              ['Accept ORBI Pay', 'Let customers pay through secure hosted payment confirmation.'],
+              ['Use PaySafe escrow', 'Hold money safely while both sides complete business actions.'],
+              ['Receive payment updates', 'Get signed webhooks for success, refund, release, and dispute events.'],
+              ['Scale with BaaS', 'Support merchants, marketplaces, SACCOS, agents, and business portals.'],
+            ].map(([title, detail]) => (
+              <div className="benefit-card" key={title}>
+                <Check size={16} />
+                <div>
+                  <strong>{title}</strong>
+                  <span>{detail}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="dashboard-grid">
         {isStaff ? (
           <>
@@ -539,9 +592,15 @@ function Overview({ role, state }: { role: PortalRole; state: PortalState }) {
         <RecentEvents events={snapshot?.events || []} />
       ) : (
         <div className="panel wide-panel">
-          <PanelHeader title="Build with ORBI" />
+          <PanelHeader title="Your first ORBI integration" />
           <div className="step-grid">
-            {['Create account', 'Explore sandbox', 'Install SDK', 'Submit live request', 'Launch securely'].map((step, index) => (
+            {[
+              'Create a developer account',
+              'Test with sandbox users',
+              'Install an ORBI SDK',
+              'Submit your live access request',
+              'Launch with approved production keys',
+            ].map((step, index) => (
               <div className="step-card" key={step}>
                 <span>{index + 1}</span>
                 <strong>{step}</strong>
@@ -2401,20 +2460,28 @@ function Copyable({ value }: { value: string }) {
 
 function AuthModal({
   config,
+  initialMode,
   onClose,
   onSignedIn,
 }: {
   config: PortalConfig;
+  initialMode: 'signin' | 'signup';
   onClose: () => void;
   onSignedIn: (session: PortalSession) => void;
 }) {
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
+  const [name, setName] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [countryCode, setCountryCode] = useState('TZ');
+  const [useCase, setUseCase] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
 
-  const submit = async () => {
+  const submitLogin = async () => {
     setWorking(true);
     setMessage(undefined);
     const result = await loginPortalWithOtp(config, email, password, otp);
@@ -2426,48 +2493,116 @@ function AuthModal({
     onSignedIn(result.data);
   };
 
+  const submitSignup = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    const result = await signupPortalDeveloper(config, {
+      name,
+      email,
+      password,
+      companyName,
+      countryCode,
+      useCase,
+      termsAccepted,
+    });
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    setMessage(result.data.nextStep || 'Account created. Sign in to start building in sandbox.');
+    setMode('signin');
+    setOtp('');
+  };
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal-card auth-card">
         <button className="icon-button modal-close" onClick={onClose} aria-label="Close login">
           <X size={20} />
         </button>
-        <p className="eyebrow">Secure access</p>
-        <h2>Sign in to ORBI Pay</h2>
+        <p className="eyebrow">ORBI Developer Access</p>
+        <h2>{mode === 'signup' ? 'Create your developer account' : 'Sign in to ORBI Pay'}</h2>
         <p className="modal-copy">
-          Use your approved developer, operator, or admin account. Public visitors can continue reading docs without signing in.
+          {mode === 'signup'
+            ? 'Start in sandbox, test real ORBI payment flows safely, then request production access when your business is ready.'
+            : 'Use your developer, operator, or admin account to continue your ORBI integration work.'}
         </p>
+        <div className="auth-tabs">
+          <button className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setMessage(undefined); }}>Create account</button>
+          <button className={mode === 'signin' ? 'active' : ''} onClick={() => { setMode('signin'); setMessage(undefined); }}>Sign in</button>
+        </div>
+        {mode === 'signup' && (
+          <>
+            <label>
+              Full name
+              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" autoComplete="name" />
+            </label>
+            <label>
+              Business or project
+              <input value={companyName} onChange={(event) => setCompanyName(event.target.value)} placeholder="Example: Tag Commerce, SACCOS portal" autoComplete="organization" />
+            </label>
+          </>
+        )}
         <label>
           Email
-          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@orbifinancial.com" autoComplete="email" />
+          <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@business.com" autoComplete="email" />
         </label>
         <label>
           Password
           <input
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            placeholder="Your portal password"
+            placeholder={mode === 'signup' ? 'At least 12 characters' : 'Your portal password'}
             type="password"
-            autoComplete="current-password"
+            autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') void submit();
+              if (event.key === 'Enter') void (mode === 'signup' ? submitSignup() : submitLogin());
             }}
           />
         </label>
-        <label>
-          Authenticator code
-          <input
-            value={otp}
-            onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-            placeholder="Optional unless MFA is enabled"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-          />
-        </label>
-        <button className="button-primary full" onClick={submit} disabled={working || !email.trim() || !password}>
-          {working ? 'Signing in' : 'Sign in'}
+        {mode === 'signup' ? (
+          <>
+            <div className="form-row">
+              <label>
+                Country
+                <input value={countryCode} onChange={(event) => setCountryCode(event.target.value.toUpperCase().slice(0, 2))} placeholder="TZ" />
+              </label>
+            </div>
+            <label>
+              What are you building?
+              <textarea
+                value={useCase}
+                onChange={(event) => setUseCase(event.target.value)}
+                placeholder="Example: I want to accept ORBI Pay in my marketplace and receive signed payment updates."
+                rows={4}
+              />
+            </label>
+            <label className="checkbox-line">
+              <input type="checkbox" checked={termsAccepted} onChange={(event) => setTermsAccepted(event.target.checked)} />
+              <span>I agree to use sandbox safely and request approval before live customer payments.</span>
+            </label>
+          </>
+        ) : (
+          <label>
+            Authenticator code
+            <input
+              value={otp}
+              onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="Optional unless MFA is enabled"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+            />
+          </label>
+        )}
+        <button
+          className="button-primary full"
+          onClick={mode === 'signup' ? submitSignup : submitLogin}
+          disabled={working || !email.trim() || !password || (mode === 'signup' && (!name.trim() || !companyName.trim() || !useCase.trim() || !termsAccepted))}
+        >
+          {working ? (mode === 'signup' ? 'Creating account' : 'Signing in') : mode === 'signup' ? 'Create sandbox account' : 'Sign in'}
         </button>
-        {message && <div className="inline-message danger">{message}</div>}
+        {message && <div className={`inline-message ${mode === 'signin' && message.toLowerCase().includes('invalid') ? 'danger' : 'info'}`}>{message}</div>}
       </div>
     </div>
   );

@@ -202,6 +202,34 @@ export async function loginPortalWithOtp(config: PortalConfig, email: string, pa
   }
 }
 
+export async function signupPortalDeveloper(
+  config: PortalConfig,
+  input: {
+    name: string;
+    email: string;
+    password: string;
+    companyName: string;
+    countryCode?: string;
+    useCase: string;
+    termsAccepted: boolean;
+  },
+): Promise<GatewayResult<{ user: PortalUser; nextStep?: string }>> {
+  try {
+    const response = await fetch(`${config.bffBaseUrl}/auth/signup`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...input, environment: config.environment }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `Signup failed with HTTP ${response.status}`), detail: body };
+    }
+    return { ok: true, data: unwrapGatewayEnvelope<{ user: PortalUser; nextStep?: string }>(body) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Signup failed.', detail: error };
+  }
+}
+
 export async function validatePortalSession(config: PortalConfig): Promise<GatewayResult<Omit<PortalSession, 'token'>>> {
   if (!config.sessionToken) return { ok: false, status: 401, error: 'No active portal session.' };
   try {
