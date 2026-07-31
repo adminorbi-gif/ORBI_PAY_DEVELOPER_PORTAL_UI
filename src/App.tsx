@@ -1429,6 +1429,7 @@ function Webhooks({ config, state, refresh }: { config: PortalConfig; state: Por
   const [replaying, setReplaying] = useState<string>();
   const [message, setMessage] = useState<string>();
   const deliveries = state.snapshot?.webhookDeliveries || [];
+  const messageDeliveries = state.snapshot?.messagingDeliveries || [];
 
   const replay = async (deliveryId: string) => {
     const reason = `Replay webhook delivery ${deliveryId}.`;
@@ -1446,27 +1447,49 @@ function Webhooks({ config, state, refresh }: { config: PortalConfig; state: Por
   };
 
   return (
-    <div className="panel wide-panel">
-      <PanelHeader title="Payment Update Delivery" action="Refresh" onAction={refresh} />
-      {message && <div className="inline-message">{message}</div>}
-      <DataTable
-        columns={['Update ID', 'Type', 'Payment', 'Status', 'HTTP', 'Attempts', 'Action']}
-        rows={deliveries.map((delivery) => {
-          const deliveryId = String(delivery.deliveryId || delivery.id || '-');
-          return [
-            <Copyable value={deliveryId} />,
-            String(delivery.eventType || '-'),
-            String(delivery.resourceId || delivery.intentId || '-'),
+    <div className="stack">
+      <div className="panel wide-panel">
+        <PanelHeader title="Payment Update Delivery" action="Refresh" onAction={refresh} />
+        {message && <div className="inline-message">{message}</div>}
+        <DataTable
+          columns={['Update ID', 'Type', 'Payment', 'Status', 'HTTP', 'Attempts', 'Action']}
+          rows={deliveries.map((delivery) => {
+            const deliveryId = String(delivery.deliveryId || delivery.id || '-');
+            return [
+              <Copyable value={deliveryId} />,
+              String(delivery.eventType || '-'),
+              String(delivery.resourceId || delivery.intentId || '-'),
+              <StatusPill tone={toneFromStatus(delivery.status)}>{String(delivery.status || 'unknown')}</StatusPill>,
+              String(delivery.httpStatus || delivery.statusCode || '-'),
+              String(delivery.attempts || delivery.attempt || 0),
+              <button className="ghost-action" disabled={deliveryId === '-' || replaying === deliveryId} onClick={() => replay(deliveryId)}>
+                <RotateCcw size={15} /> Replay
+              </button>,
+            ];
+          })}
+          empty="No payment updates yet."
+        />
+      </div>
+
+      <div className="panel wide-panel">
+        <PanelHeader title="Security Message Delivery" action="Refresh" onAction={refresh} />
+        <p className="security-note">
+          Shows delivery evidence for safe ORBI Talk messages such as OTP, email confirmation, key rotation, PaySafe action,
+          and webhook incident notices. Secrets and OTP values are never displayed here.
+        </p>
+        <DataTable
+          columns={['Message ID', 'Template', 'Channel', 'Recipient', 'Status', 'Attempts']}
+          rows={messageDeliveries.map((delivery) => [
+            <Copyable value={String(delivery.deliveryId || '-')} />,
+            String(delivery.templateCode || '-'),
+            `${String(delivery.channel || '-')} · ${String(delivery.language || '-')}`,
+            String(delivery.recipientIdentityRef || '-'),
             <StatusPill tone={toneFromStatus(delivery.status)}>{String(delivery.status || 'unknown')}</StatusPill>,
-            String(delivery.httpStatus || delivery.statusCode || '-'),
-            String(delivery.attempts || delivery.attempt || 0),
-            <button className="ghost-action" disabled={deliveryId === '-' || replaying === deliveryId} onClick={() => replay(deliveryId)}>
-              <RotateCcw size={15} /> Replay
-            </button>,
-          ];
-        })}
-        empty="No payment updates yet."
-      />
+            String(delivery.attempt || 0),
+          ])}
+          empty="No security messages yet."
+        />
+      </div>
     </div>
   );
 }

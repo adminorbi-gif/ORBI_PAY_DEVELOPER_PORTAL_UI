@@ -75,6 +75,19 @@ export type WebhookDelivery = Record<string, unknown> & {
   createdAt?: string;
 };
 
+export type MessagingDelivery = Record<string, unknown> & {
+  deliveryId?: string;
+  eventId?: string;
+  templateCode?: string;
+  channel?: string;
+  language?: string;
+  recipientIdentityRef?: string;
+  status?: string;
+  attempt?: number;
+  statusCode?: number;
+  createdAt?: string;
+};
+
 export type OperatorIncident = Record<string, unknown> & {
   incidentId?: string;
   incidentType?: string;
@@ -115,6 +128,7 @@ export type PortalSnapshot = {
   applications: ServiceApplication[];
   events: DeveloperEvent[];
   webhookDeliveries: WebhookDelivery[];
+  messagingDeliveries: MessagingDelivery[];
   docs: Array<Record<string, unknown>>;
   sdks: Array<Record<string, unknown>>;
   consentScopes: Array<Record<string, unknown>>;
@@ -282,6 +296,7 @@ const emptySnapshot = (): PortalSnapshot => ({
   applications: [],
   events: [],
   webhookDeliveries: [],
+  messagingDeliveries: [],
   docs: [],
   sdks: [],
   consentScopes: [],
