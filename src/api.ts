@@ -37,6 +37,10 @@ export type PortalSession = {
   mfaEnrollmentRequired?: boolean;
 };
 
+export type MfaEnrollmentResult = PortalSession & {
+  recoveryCodes: string[];
+};
+
 export type MfaEnrollmentSetup = {
   otpauthUri: string;
   secret: string;
@@ -206,12 +210,18 @@ export async function loginPortal(config: PortalConfig, email: string, password:
   return loginPortalWithOtp(config, email, password);
 }
 
-export async function loginPortalWithOtp(config: PortalConfig, email: string, password: string, otp?: string): Promise<GatewayResult<PortalSession>> {
+export async function loginPortalWithOtp(
+  config: PortalConfig,
+  email: string,
+  password: string,
+  otp?: string,
+  recoveryCode?: string,
+): Promise<GatewayResult<PortalSession>> {
   try {
     const response = await fetch(`${config.bffBaseUrl}/auth/login`, {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, otp, environment: config.environment }),
+      body: JSON.stringify({ email, password, otp, recoveryCode, environment: config.environment }),
     });
     const body = await response.json().catch(() => null);
     if (!response.ok) {
@@ -246,7 +256,7 @@ export async function startPortalMfaEnrollment(config: PortalConfig): Promise<Ga
   }
 }
 
-export async function verifyPortalMfaEnrollment(config: PortalConfig, code: string): Promise<GatewayResult<PortalSession>> {
+export async function verifyPortalMfaEnrollment(config: PortalConfig, code: string): Promise<GatewayResult<MfaEnrollmentResult>> {
   try {
     const response = await fetch(`${config.bffBaseUrl}/auth/mfa-action`, {
       method: 'POST',
@@ -261,8 +271,8 @@ export async function verifyPortalMfaEnrollment(config: PortalConfig, code: stri
     if (!response.ok) {
       return { ok: false, status: response.status, error: String(body?.error || `MFA verification failed with HTTP ${response.status}`), detail: body };
     }
-    const session = unwrapGatewayEnvelope<PortalSession>(body);
-    storePortalSession(session);
+    const session = unwrapGatewayEnvelope<MfaEnrollmentResult>(body);
+    storePortalSession({ token: session.token, user: session.user, expiresAt: session.expiresAt });
     return { ok: true, data: session };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Unable to verify MFA.', detail: error };

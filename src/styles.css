@@ -1761,6 +1761,54 @@ tr:last-child td {
   margin: 14px auto 0;
 }
 
+.auth-method-switch {
+  width: max-content;
+  margin: -4px 0 14px auto;
+}
+
+.recovery-codes-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.recovery-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  color: #854d0e;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 14px;
+}
+
+.recovery-warning p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.recovery-code-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 14px;
+  background: #10201b;
+  border-radius: 16px;
+}
+
+.recovery-code-grid code {
+  min-width: 0;
+  padding: 7px 8px;
+  color: #d1fae5;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  font-size: 11px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
 .modal-close {
   position: absolute;
   top: 18px;
@@ -2527,6 +2575,10 @@ textarea {
 
   .signup-review > div {
     grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .recovery-code-grid {
+    grid-template-columns: 1fr;
   }
 
   .topbar {

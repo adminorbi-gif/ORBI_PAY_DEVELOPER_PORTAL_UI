@@ -1538,6 +1538,45 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
     }
   };
 
+  const resetMfa = async (user: PortalUser) => {
+    if (!user.userId) return;
+    const reason = window.prompt(`Why are you resetting MFA for ${user.email}?`);
+    if (!reason?.trim()) return;
+    if (!window.confirm(`This will revoke every active session for ${user.email} and require a new authenticator setup.\n\nContinue?`)) return;
+    setWorking(true);
+    setMessage(undefined);
+    try {
+      const url = new URL(`${config.bffBaseUrl}/users/${encodeURIComponent(user.userId)}`, window.location.origin);
+      url.searchParams.set('environment', config.environment);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
+        },
+        body: JSON.stringify({
+          action: 'reset_mfa',
+          reason: reason.trim(),
+          confirmationAccepted: true,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      const error = String(body?.error || `Reset failed with HTTP ${response.status}`);
+      if (response.status === 403 && /fresh mfa|required.*mfa|mfa.*required/i.test(error)) {
+        window.dispatchEvent(new CustomEvent('orbi-mfa-step-up-required'));
+        setMessage('Verify your authenticator code, then retry the MFA reset.');
+      } else {
+        setMessage(response.ok ? `MFA reset completed for ${user.email}.` : error);
+      }
+      if (response.ok) refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to reset MFA.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
   return (
     <div className="stack">
       <div className="panel wide-panel">
@@ -1572,7 +1611,7 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
       <div className="panel wide-panel">
         <PanelHeader title="Active Portal Users" />
         <DataTable
-          columns={['Name', 'Email', 'Role', 'MFA', 'Live', 'Status']}
+          columns={['Name', 'Email', 'Role', 'MFA', 'Live', 'Status', 'Security']}
           rows={users.map((user) => [
             String(user.name || '-'),
             String(user.email || '-'),
@@ -1580,6 +1619,13 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
             user.mfaRequired ? 'Required' : 'Not required',
             user.liveAccess ? 'Enabled' : 'Sandbox only',
             user.enabled === false ? 'Disabled' : 'Enabled',
+            <button
+              className="mini-link"
+              disabled={working || !user.mfaRequired || user.email === readStoredPortalSession()?.user.email}
+              onClick={() => resetMfa(user)}
+            >
+              Reset MFA
+            </button>,
           ])}
           empty="No portal users returned. Team access is managed by approved ORBI administrators."
         />
@@ -1630,6 +1676,8 @@ function MfaEnrollmentModal({
 }) {
   const [setup, setSetup] = useState<MfaEnrollmentSetup>();
   const [code, setCode] = useState('');
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>();
+  const [verifiedSession, setVerifiedSession] = useState<PortalSession>();
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
 
@@ -1654,7 +1702,12 @@ function MfaEnrollmentModal({
       setMessage(result.error);
       return;
     }
-    onCompleted(result.data);
+    setRecoveryCodes(result.data.recoveryCodes);
+    setVerifiedSession({
+      token: result.data.token,
+      user: result.data.user,
+      expiresAt: result.data.expiresAt,
+    });
   };
 
   return (
@@ -1665,7 +1718,22 @@ function MfaEnrollmentModal({
         <p className="modal-copy">
           Your role requires multi-factor authentication. Set up an authenticator before accessing protected portal actions.
         </p>
-        {!setup ? (
+        {recoveryCodes && verifiedSession ? (
+          <div className="recovery-codes-panel">
+            <div className="recovery-warning">
+              <AlertTriangle size={18} />
+              <p>Save these one-time recovery codes now. ORBI will not show them again.</p>
+            </div>
+            <div className="recovery-code-grid">
+              {recoveryCodes.map((recoveryCode) => <code key={recoveryCode}>{recoveryCode}</code>)}
+            </div>
+            <Copyable value={recoveryCodes.join('\n')} />
+            <p className="security-note">Keep them in a password manager or encrypted offline storage. Never send them by email or chat.</p>
+            <button className="button-primary full" onClick={() => onCompleted(verifiedSession)}>
+              I saved my recovery codes
+            </button>
+          </div>
+        ) : !setup ? (
           <div className="mfa-enrollment-intro">
             <div className="security-step"><span>1</span><p>Install Google Authenticator, Microsoft Authenticator, 2FAS, Authy, or Aegis.</p></div>
             <div className="security-step"><span>2</span><p>Scan the secure QR code generated for this account.</p></div>
@@ -3018,6 +3086,8 @@ function AuthModal({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
+  const [recoveryCode, setRecoveryCode] = useState('');
+  const [useRecoveryCode, setUseRecoveryCode] = useState(false);
   const [name, setName] = useState('');
   const [username, setUsername] = useState('');
   const [companyName, setCompanyName] = useState('');
@@ -3057,7 +3127,13 @@ function AuthModal({
   const submitLogin = async () => {
     setWorking(true);
     setMessage(undefined);
-    const result = await loginPortalWithOtp(config, email, password, otp);
+    const result = await loginPortalWithOtp(
+      config,
+      email,
+      password,
+      useRecoveryCode ? undefined : otp,
+      useRecoveryCode ? recoveryCode : undefined,
+    );
     setWorking(false);
     if (!result.ok) {
       setMessage(result.error);
@@ -3209,16 +3285,38 @@ function AuthModal({
                   }}
                 />
               </label>
-              <label>
-                Authenticator code
-                <input
-                  value={otp}
-                  onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="Optional unless MFA is enabled"
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                />
-              </label>
+              {useRecoveryCode ? (
+                <label>
+                  Recovery code
+                  <input
+                    value={recoveryCode}
+                    onChange={(event) => setRecoveryCode(event.target.value.toUpperCase().slice(0, 24))}
+                    placeholder="ORBI-XXXX-XXXX-XXXX-XXXX"
+                    autoComplete="off"
+                  />
+                </label>
+              ) : (
+                <label>
+                  Authenticator code
+                  <input
+                    value={otp}
+                    onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="Optional unless MFA is enabled"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                  />
+                </label>
+              )}
+              <button
+                className="mini-link auth-method-switch"
+                type="button"
+                onClick={() => {
+                  setUseRecoveryCode((current) => !current);
+                  setMessage(undefined);
+                }}
+              >
+                {useRecoveryCode ? 'Use authenticator code' : 'Use a recovery code'}
+              </button>
             </div>
           )}
 
