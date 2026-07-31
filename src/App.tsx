@@ -456,7 +456,7 @@ function SectionRenderer({
   if (section === 'keys') return <KeysAndSecrets config={config} state={portalState} refresh={refresh} openKeyModal={openKeyModal} role={role} />;
   if (section === 'team') return <TeamAccess config={config} state={portalState} refresh={refresh} />;
   if (section === 'scopes') return <ScopesAndConsent config={config} state={portalState} refresh={refresh} role={role} />;
-  if (section === 'webhooks') return <Webhooks config={config} state={portalState} refresh={refresh} />;
+  if (section === 'webhooks') return <Webhooks config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'health') return <Health state={portalState} />;
   if (section === 'incidents') return <OperatorIncidents config={config} state={portalState} refresh={refresh} />;
   if (section === 'docs') return <Docs state={portalState} config={config} />;
@@ -1425,7 +1425,7 @@ function ScopeRequestPanel({ config, refresh }: { config: PortalConfig; refresh:
   );
 }
 
-function Webhooks({ config, state, refresh }: { config: PortalConfig; state: PortalState; refresh: () => void }) {
+function Webhooks({ config, state, refresh, role }: { config: PortalConfig; state: PortalState; refresh: () => void; role: PortalRole }) {
   const [replaying, setReplaying] = useState<string>();
   const [message, setMessage] = useState<string>();
   const deliveries = state.snapshot?.webhookDeliveries || [];
@@ -1471,6 +1471,7 @@ function Webhooks({ config, state, refresh }: { config: PortalConfig; state: Por
         />
       </div>
 
+      {roleCanManageServices(role) && (
       <div className="panel wide-panel">
         <PanelHeader title="Security Message Delivery" action="Refresh" onAction={refresh} />
         <p className="security-note">
@@ -1490,6 +1491,7 @@ function Webhooks({ config, state, refresh }: { config: PortalConfig; state: Por
           empty="No security messages yet."
         />
       </div>
+      )}
     </div>
   );
 }
