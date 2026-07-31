@@ -25,6 +25,7 @@ export default async function handler(req, res) {
         ready: undefined,
         services: [],
         applications: [],
+        scopeRequests: [],
         events: [],
         webhookDeliveries: [],
         docs: [],

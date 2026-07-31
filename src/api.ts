@@ -58,6 +58,19 @@ export type ServiceApplication = Record<string, unknown> & {
   requestedScopes?: string[];
 };
 
+export type ScopeRequest = Record<string, unknown> & {
+  requestId?: string;
+  serviceCode?: string;
+  requestedScopes?: string[];
+  reason?: string;
+  environment?: PortalEnvironment;
+  status?: 'pending_review' | 'approved' | 'rejected' | string;
+  submittedAt?: string;
+  decidedAt?: string;
+  decidedBy?: string;
+  decisionReason?: string;
+};
+
 export type DeveloperEvent = Record<string, unknown> & {
   eventId?: string;
   eventType?: string;
@@ -127,6 +140,7 @@ export type PortalSnapshot = {
   ready?: unknown;
   services: ServiceRecord[];
   applications: ServiceApplication[];
+  scopeRequests: ScopeRequest[];
   events: DeveloperEvent[];
   webhookDeliveries: WebhookDelivery[];
   messagingDeliveries: MessagingDelivery[];
@@ -324,6 +338,7 @@ export async function gatewayRequest<T>(
 const emptySnapshot = (): PortalSnapshot => ({
   services: [],
   applications: [],
+  scopeRequests: [],
   events: [],
   webhookDeliveries: [],
   messagingDeliveries: [],

@@ -33,6 +33,7 @@ import {
   type SandboxAccount,
   type ServiceApplication,
   type ServiceRecord,
+  type ScopeRequest,
   type WebhookDelivery,
 } from './api';
 import { Environment, navItems, SectionId, StatusTone } from './data';
@@ -703,6 +704,11 @@ const accessCapabilities = [
     detail: 'Connect your platform customer or seller to an ORBI payment identity.',
   },
   {
+    scope: 'payment_profile:read',
+    title: 'Read linked payment profiles',
+    detail: 'Read approved payment profile details for your own integration.',
+  },
+  {
     scope: 'payments:create',
     title: 'Create payments',
     detail: 'Start ORBI checkout payments with customer approval.',
@@ -711,6 +717,31 @@ const accessCapabilities = [
     scope: 'escrow:create',
     title: 'Create PaySafe holds',
     detail: 'Hold money safely until the buyer and seller flow is completed.',
+  },
+  {
+    scope: 'escrow:read',
+    title: 'Read PaySafe status',
+    detail: 'Read the current status of PaySafe payments created by your integration.',
+  },
+  {
+    scope: 'escrow:release:request',
+    title: 'Request PaySafe release',
+    detail: 'Request release while preserving PaySafe approval and dispute controls.',
+  },
+  {
+    scope: 'escrow:refund:request',
+    title: 'Request PaySafe refund',
+    detail: 'Request a controlled refund without bypassing PaySafe lifecycle rules.',
+  },
+  {
+    scope: 'escrow:dispute:create',
+    title: 'Open PaySafe disputes',
+    detail: 'Open a dispute for an eligible PaySafe payment.',
+  },
+  {
+    scope: 'withdrawal:request',
+    title: 'Request withdrawals',
+    detail: 'Request a controlled withdrawal to an approved destination.',
   },
   {
     scope: 'balance:read',
@@ -736,7 +767,10 @@ function AccessRequests({
   role: PortalRole;
 }) {
   const services = state.snapshot?.services || [];
-  const selectedService = services[0];
+  const [selectedCode, setSelectedCode] = useState('');
+  const selectedService = services.find((service) =>
+    String(service.serviceCode || service.code || '') === selectedCode,
+  ) || services[0];
   const selectedServiceCode = String(selectedService?.serviceCode || selectedService?.code || '');
   const granted = selectedService ? arrayValue(selectedService, 'scopesGranted', 'scopes_granted', 'scopesApproved', 'scopes_approved') : [];
   const pending = selectedService ? arrayValue(selectedService, 'scopesPending', 'scopes_pending') : [];
@@ -775,6 +809,20 @@ function AccessRequests({
       </div>
       <div className="panel wide-panel">
         <PanelHeader title="What This Account Can Use" />
+        {services.length > 1 && (
+          <label>
+            Integration
+            <select
+              value={selectedServiceCode}
+              onChange={(event) => setSelectedCode(event.target.value)}
+            >
+              {services.map((service) => {
+                const code = String(service.serviceCode || service.code || '');
+                return <option value={code} key={code}>{String(service.displayName || service.legalName || code)}</option>;
+              })}
+            </select>
+          </label>
+        )}
         {selectedService ? (
           <>
             <div className="profile-hero">
@@ -813,7 +861,14 @@ function AccessRequests({
           />
         )}
       </div>
-      <AccessRequestPanel config={config} serviceCode={selectedServiceCode} role={role} refresh={refresh} />
+      <AccessRequestPanel
+        config={config}
+        serviceCode={selectedServiceCode}
+        granted={granted}
+        pending={pending}
+        role={role}
+        refresh={refresh}
+      />
     </div>
   );
 }
@@ -821,18 +876,33 @@ function AccessRequests({
 function AccessRequestPanel({
   config,
   serviceCode,
+  granted,
+  pending,
   role,
   refresh,
 }: {
   config: PortalConfig;
   serviceCode: string;
+  granted: string[];
+  pending: string[];
   role: PortalRole;
   refresh: () => void;
 }) {
-  const [requestedScope, setRequestedScope] = useState('escrow:create');
+  const [requestedScopes, setRequestedScopes] = useState<string[]>([]);
+  const [reason, setReason] = useState('');
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
-  const canRequestScope = Boolean(serviceCode) && role !== 'public_developer';
+  const canRequestScope = Boolean(serviceCode)
+    && role !== 'public_developer'
+    && requestedScopes.length > 0
+    && reason.trim().length >= 10;
+
+  const toggleScope = (scope: string) => {
+    if (granted.includes(scope) || pending.includes(scope)) return;
+    setRequestedScopes((current) =>
+      current.includes(scope) ? current.filter((item) => item !== scope) : [...current, scope],
+    );
+  };
 
   const requestScope = async () => {
     setWorking(true);
@@ -840,13 +910,17 @@ function AccessRequestPanel({
       method: 'POST',
       body: JSON.stringify({
         environment: config.environment,
-        requestedScopes: [requestedScope],
-        reason: `Developer requested ${requestedScope} capability from Access & Requests control panel.`,
+        requestedScopes,
+        reason: reason.trim(),
       }),
     });
-    setMessage(result.ok ? `${requestedScope} request submitted.` : result.error);
+    setMessage(result.ok ? `${requestedScopes.length} permission request${requestedScopes.length === 1 ? '' : 's'} submitted.` : result.error);
     setWorking(false);
-    if (result.ok) refresh();
+    if (result.ok) {
+      setRequestedScopes([]);
+      setReason('');
+      refresh();
+    }
   };
 
   return (
@@ -855,19 +929,44 @@ function AccessRequestPanel({
       <p className="security-note">
         Choose the ORBI feature your integration needs. ORBI reviews sensitive payment features before enabling them.
       </p>
-      <div className="form-grid">
-        <label>Integration code<input value={serviceCode || 'No integration assigned'} readOnly /></label>
-        <label>
-          Permission
-          <select value={requestedScope} onChange={(event) => setRequestedScope(event.target.value)}>
-            {accessCapabilities.map((capability) => (
-              <option value={capability.scope} key={capability.scope}>{capability.title}</option>
-            ))}
-          </select>
-        </label>
+      <label>Integration code<input value={serviceCode || 'No integration assigned'} readOnly /></label>
+      <div className="access-grid">
+        {accessCapabilities.map((capability) => {
+          const isGranted = granted.includes(capability.scope);
+          const isPending = pending.includes(capability.scope);
+          const selected = requestedScopes.includes(capability.scope);
+          return (
+            <label
+              className={`access-card ${isGranted ? 'granted' : isPending ? 'pending' : selected ? 'selected' : 'denied'}`}
+              key={capability.scope}
+            >
+              <input
+                type="checkbox"
+                checked={isGranted || isPending || selected}
+                disabled={isGranted || isPending}
+                onChange={() => toggleScope(capability.scope)}
+              />
+              <StatusPill tone={isGranted ? 'success' : isPending ? 'warning' : selected ? 'info' : 'neutral'}>
+                {isGranted ? 'Granted' : isPending ? 'Pending review' : selected ? 'Selected' : 'Available'}
+              </StatusPill>
+              <strong>{capability.title}</strong>
+              <span>{capability.detail}</span>
+              <small>{capability.scope}</small>
+            </label>
+          );
+        })}
       </div>
+      <label>
+        Why does your integration need these permissions?
+        <textarea
+          value={reason}
+          onChange={(event) => setReason(event.target.value)}
+          maxLength={1000}
+          placeholder="Describe the exact feature and how customer data or money will be protected."
+        />
+      </label>
       <button className="button-primary inline-link" disabled={!canRequestScope || working} onClick={requestScope}>
-        {working ? 'Submitting' : 'Submit request'} <ArrowRight size={16} />
+        {working ? 'Submitting' : `Request ${requestedScopes.length || ''} permission${requestedScopes.length === 1 ? '' : 's'}`} <ArrowRight size={16} />
       </button>
       {role === 'public_developer' && (
         <div className="inline-message">Sign in as a developer before requesting access.</div>
@@ -1621,35 +1720,93 @@ function ScopesAndConsent({ config, state, refresh, role }: { config: PortalConf
       ) : (
         <EmptyState title="No permissions available" detail="Permissions will appear after ORBI publishes the approved catalog." />
       )}
-      {['operator', 'admin'].includes(role) && <ScopeRequestPanel config={config} refresh={refresh} />}
+      {['operator', 'admin'].includes(role) && (
+        <ScopeDecisionQueue
+          config={config}
+          requests={state.snapshot?.scopeRequests || []}
+          refresh={refresh}
+        />
+      )}
     </div>
   );
 }
 
-function ScopeRequestPanel({ config, refresh }: { config: PortalConfig; refresh: () => void }) {
-  const [serviceCode, setServiceCode] = useState('');
-  const [scope, setScope] = useState('payments:create');
+function ScopeDecisionQueue({
+  config,
+  requests,
+  refresh,
+}: {
+  config: PortalConfig;
+  requests: ScopeRequest[];
+  refresh: () => void;
+}) {
   const [message, setMessage] = useState<string>();
+  const [working, setWorking] = useState<string>();
+  const pendingRequests = requests.filter((request) => request.status === 'pending_review');
 
-  const submit = async () => {
-    const result = await gatewayRequest(config, `/v1/developer/services/${encodeURIComponent(serviceCode.trim())}/scope-requests`, 'operator', {
+  const decide = async (request: ScopeRequest, decision: 'approve' | 'reject') => {
+    const requestId = String(request.requestId || '');
+    const reason = window.prompt(
+      decision === 'approve' ? 'Why should these permissions be approved?' : 'Why should this request be rejected?',
+    );
+    if (!requestId || !reason?.trim() || reason.trim().length < 10) {
+      setMessage('Add a clear review reason with at least 10 characters.');
+      return;
+    }
+    const action = decision === 'approve' ? 'approve' : 'reject';
+    if (!window.confirm(`You are about to ${action} this permission request. This action is audited.\n\nContinue?`)) return;
+    setWorking(requestId);
+    const result = await gatewayRequest(config, `/v1/developer/scope-requests/${encodeURIComponent(requestId)}/decision`, 'operator', {
       method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason.trim(),
       body: JSON.stringify({
-        environment: config.environment,
-        requestedScopes: [scope],
-        reason: `Request ${scope} from Developer Portal for controlled integration access.`,
+        decision,
+        reason: reason.trim(),
       }),
     });
-    setMessage(result.ok ? 'Permission request submitted.' : result.error);
+    setMessage(result.ok ? `Permission request ${decision === 'approve' ? 'approved' : 'rejected'}.` : result.error);
+    setWorking(undefined);
     if (result.ok) refresh();
   };
 
   return (
     <div className="operator-form">
-      <h3>Request Permission</h3>
-      <label>Integration code<input value={serviceCode} onChange={(event) => setServiceCode(event.target.value)} placeholder="orbi-shop" /></label>
-      <label>Permission<input value={scope} onChange={(event) => setScope(event.target.value)} placeholder="payments:create" /></label>
-      <button className="button-primary inline-link" onClick={submit}>Submit permission request</button>
+      <h3>Permission requests awaiting review</h3>
+      {pendingRequests.length ? pendingRequests.map((request) => {
+        const requestId = String(request.requestId || '');
+        return (
+          <div className="detail-card" key={requestId}>
+            <div className="service-card-head">
+              <div>
+                <p className="mono">{String(request.serviceCode || '-')}</p>
+                <h3>{(request.requestedScopes || []).join(', ')}</h3>
+              </div>
+              <StatusPill tone="warning">{String(request.environment || 'sandbox')}</StatusPill>
+            </div>
+            <p>{String(request.reason || 'No reason supplied.')}</p>
+            <small>{request.submittedAt ? new Date(request.submittedAt).toLocaleString() : 'Time unavailable'}</small>
+            <div className="row-actions">
+              <button
+                className="button-primary inline-link"
+                disabled={working === requestId}
+                onClick={() => void decide(request, 'approve')}
+              >
+                Approve
+              </button>
+              <button
+                className="ghost-action danger-action"
+                disabled={working === requestId}
+                onClick={() => void decide(request, 'reject')}
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        );
+      }) : (
+        <EmptyState title="No permission requests awaiting review" detail="New developer requests will appear here." />
+      )}
       {message && <div className="inline-message">{message}</div>}
     </div>
   );

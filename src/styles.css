@@ -1393,10 +1393,25 @@ tr:last-child td {
 .access-card {
   display: grid;
   gap: 10px;
+  margin-bottom: 0;
   padding: 16px;
+  color: var(--ink);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: #f8fcfa;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+
+.access-card input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  accent-color: var(--brand);
+}
+
+.access-card:has(input:disabled) {
+  cursor: not-allowed;
 }
 
 .access-card.granted {
@@ -1407,6 +1422,12 @@ tr:last-child td {
 .access-card.pending {
   border-color: #fde68a;
   background: #fffbeb;
+}
+
+.access-card.selected {
+  border-color: var(--brand);
+  background: #ecfdf5;
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.1);
 }
 
 .access-card.denied {
@@ -1421,6 +1442,7 @@ tr:last-child td {
 }
 
 .access-card p,
+.access-card span,
 .access-card small {
   margin: 0;
   color: var(--muted);
