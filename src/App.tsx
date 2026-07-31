@@ -23,10 +23,12 @@ import {
   loginPortalWithOtp,
   logoutPortal,
   readStoredPortalSession,
+  resendPortalDeveloperEmail,
   signupPortalDeveloper,
   startPortalMfaEnrollment,
   stepUpPortalMfa,
   validatePortalSession,
+  verifyPortalDeveloperEmail,
   verifyPortalMfaEnrollment,
   type DeveloperEvent,
   type PortalConfig,
@@ -3095,12 +3097,16 @@ function AuthModal({
   const [useCase, setUseCase] = useState('');
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [signupStep, setSignupStep] = useState(1);
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState(false);
+  const [emailVerificationCode, setEmailVerificationCode] = useState('');
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
 
   const switchMode = (nextMode: 'signin' | 'signup') => {
     setMode(nextMode);
     setSignupStep(1);
+    setEmailVerificationRequired(false);
+    setEmailVerificationCode('');
     setMessage(undefined);
   };
 
@@ -3137,6 +3143,7 @@ function AuthModal({
     setWorking(false);
     if (!result.ok) {
       setMessage(result.error);
+      if (/verify your email/i.test(result.error)) setEmailVerificationRequired(true);
       return;
     }
     onSignedIn(result.data);
@@ -3160,10 +3167,37 @@ function AuthModal({
       setMessage(result.error);
       return;
     }
-    setMessage(result.data.nextStep || 'Account created. Sign in to start building in sandbox.');
+    setMessage(result.data.nextStep || 'Enter the verification code sent to your email.');
+    setEmailVerificationRequired(Boolean(result.data.verificationRequired));
+    if (!result.data.verificationRequired) {
+      setMode('signin');
+      setSignupStep(1);
+      setOtp('');
+    }
+  };
+
+  const submitEmailVerification = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    const result = await verifyPortalDeveloperEmail(config, email, emailVerificationCode);
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    setEmailVerificationRequired(false);
+    setEmailVerificationCode('');
     setMode('signin');
     setSignupStep(1);
-    setOtp('');
+    setMessage('Email verified. Sign in to start building in sandbox.');
+  };
+
+  const resendEmailVerification = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    const result = await resendPortalDeveloperEmail(config, email);
+    setWorking(false);
+    setMessage(result.ok ? (result.data.nextStep || 'A new verification code has been requested.') : result.error);
   };
 
   return (
@@ -3173,19 +3207,41 @@ function AuthModal({
           <X size={20} />
         </button>
         <p className="eyebrow">ORBI Developer Access</p>
-        <h2>{mode === 'signup' ? 'Create your developer account' : 'Sign in to ORBI Pay'}</h2>
+        <h2>{emailVerificationRequired ? 'Verify your email' : mode === 'signup' ? 'Create your developer account' : 'Sign in to ORBI Pay'}</h2>
         <p className="modal-copy">
-          {mode === 'signup'
+          {emailVerificationRequired
+            ? `Enter the 6-digit code sent to ${email}. The code expires in 15 minutes.`
+            : mode === 'signup'
             ? 'Start in sandbox, test real ORBI payment flows safely, then request production access when your business is ready.'
             : 'Use your developer, operator, or admin account to continue your ORBI integration work.'}
         </p>
-        <div className="auth-tabs">
+        {!emailVerificationRequired && <div className="auth-tabs">
           <button className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}>Create account</button>
           <button className={mode === 'signin' ? 'active' : ''} onClick={() => switchMode('signin')}>Sign in</button>
-        </div>
+        </div>}
 
         <div className="auth-form-body">
-          {mode === 'signup' && (
+          {emailVerificationRequired ? (
+            <div className="auth-step email-verification-step">
+              <label>
+                Verification code
+                <input
+                  value={emailVerificationCode}
+                  onChange={(event) => setEmailVerificationCode(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  placeholder="000000"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && emailVerificationCode.length === 6) void submitEmailVerification();
+                  }}
+                />
+              </label>
+              <button className="mini-link" type="button" disabled={working} onClick={resendEmailVerification}>
+                Resend verification code
+              </button>
+            </div>
+          ) : mode === 'signup' && (
             <div className="signup-progress" aria-label={`Signup step ${signupStep} of 3`}>
               <div className="signup-progress-copy">
                 <span>Step {signupStep} of 3</span>
@@ -3197,7 +3253,7 @@ function AuthModal({
             </div>
           )}
 
-          {mode === 'signup' && signupStep === 1 && (
+          {!emailVerificationRequired && mode === 'signup' && signupStep === 1 && (
             <div className="auth-step">
               <label>
                 Full name
@@ -3229,7 +3285,7 @@ function AuthModal({
             </div>
           )}
 
-          {mode === 'signup' && signupStep === 2 && (
+          {!emailVerificationRequired && mode === 'signup' && signupStep === 2 && (
             <div className="auth-step">
               <label>
                 Business or project
@@ -3251,7 +3307,7 @@ function AuthModal({
             </div>
           )}
 
-          {mode === 'signup' && signupStep === 3 && (
+          {!emailVerificationRequired && mode === 'signup' && signupStep === 3 && (
             <div className="auth-step">
               <div className="signup-review">
                 <div><span>Developer</span><strong>{name}</strong><small>@{username}</small></div>
@@ -3266,7 +3322,7 @@ function AuthModal({
             </div>
           )}
 
-          {mode === 'signin' && (
+          {!emailVerificationRequired && mode === 'signin' && (
             <div className="auth-step">
               <label>
                 Email
@@ -3323,7 +3379,16 @@ function AuthModal({
           {message && <div className={`inline-message ${mode === 'signin' && message.toLowerCase().includes('invalid') ? 'danger' : 'info'}`}>{message}</div>}
         </div>
 
-        {mode === 'signup' ? (
+        {emailVerificationRequired ? (
+          <div className="auth-actions">
+            <button className="ghost-action" onClick={() => setEmailVerificationRequired(false)} disabled={working}>
+              Back to sign in
+            </button>
+            <button className="button-primary" onClick={submitEmailVerification} disabled={working || emailVerificationCode.length !== 6}>
+              {working ? 'Verifying' : 'Verify email'}
+            </button>
+          </div>
+        ) : mode === 'signup' ? (
           <div className="auth-actions">
             {signupStep > 1 && (
               <button className="ghost-action" onClick={() => moveSignup(-1)} disabled={working}>

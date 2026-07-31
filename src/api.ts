@@ -314,7 +314,7 @@ export async function signupPortalDeveloper(
     useCase: string;
     termsAccepted: boolean;
   },
-): Promise<GatewayResult<{ user: PortalUser; nextStep?: string }>> {
+): Promise<GatewayResult<{ user: PortalUser; verificationRequired?: boolean; verificationDelivery?: string; nextStep?: string }>> {
   try {
     const response = await fetch(`${config.bffBaseUrl}/auth/signup`, {
       method: 'POST',
@@ -325,9 +325,50 @@ export async function signupPortalDeveloper(
     if (!response.ok) {
       return { ok: false, status: response.status, error: String(body?.error || `Signup failed with HTTP ${response.status}`), detail: body };
     }
-    return { ok: true, data: unwrapGatewayEnvelope<{ user: PortalUser; nextStep?: string }>(body) };
+    return { ok: true, data: unwrapGatewayEnvelope<{ user: PortalUser; verificationRequired?: boolean; verificationDelivery?: string; nextStep?: string }>(body) };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : 'Signup failed.', detail: error };
+  }
+}
+
+export async function verifyPortalDeveloperEmail(
+  config: PortalConfig,
+  email: string,
+  code: string,
+): Promise<GatewayResult<{ email: string; verified: boolean }>> {
+  try {
+    const response = await fetch(`${config.bffBaseUrl}/auth/signup`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'verify_email', email, code, environment: config.environment }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `Verification failed with HTTP ${response.status}`), detail: body };
+    }
+    return { ok: true, data: unwrapGatewayEnvelope<{ email: string; verified: boolean }>(body) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Email verification failed.', detail: error };
+  }
+}
+
+export async function resendPortalDeveloperEmail(
+  config: PortalConfig,
+  email: string,
+): Promise<GatewayResult<{ accepted: boolean; delivery?: string; nextStep?: string }>> {
+  try {
+    const response = await fetch(`${config.bffBaseUrl}/auth/signup`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'resend_email', email, environment: config.environment }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `Resend failed with HTTP ${response.status}`), detail: body };
+    }
+    return { ok: true, data: unwrapGatewayEnvelope<{ accepted: boolean; delivery?: string; nextStep?: string }>(body) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Unable to resend verification email.', detail: error };
   }
 }
 

@@ -9,10 +9,18 @@ export default async function handler(req, res) {
   } catch {
     body = {};
   }
+  const action = String(body.action || 'signup');
+  const paths = {
+    signup: '/v1/portal/auth/signup',
+    verify_email: '/v1/portal/auth/email/verify',
+    resend_email: '/v1/portal/auth/email/resend',
+  };
+  if (!paths[action]) return json(res, 400, { error: 'Unsupported account action.' });
+  const { action: _action, ...payload } = body;
   return proxyPortalRequest(req, res, {
-    path: '/v1/portal/auth/signup',
+    path: paths[action],
     method: 'POST',
-    body,
+    body: payload,
     environment: readEnvironment(body.environment),
   });
 }
