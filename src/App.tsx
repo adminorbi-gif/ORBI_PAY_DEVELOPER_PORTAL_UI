@@ -746,6 +746,33 @@ function AccessRequests({
 
   return (
     <div className="stack">
+      <div className="panel wide-panel policy-panel">
+        <div>
+          <p className="eyebrow">Important business rule</p>
+          <h2>Developer access is not a wallet.</h2>
+          <p>
+            Your developer account helps you build and test integrations. To receive real money, your merchant,
+            seller, POS shop, SACCOS, or organization must link an approved ORBI financial profile.
+          </p>
+        </div>
+        <StatusPill tone="info">Payment profile required</StatusPill>
+      </div>
+      <div className="detail-grid">
+        <div className="detail-card">
+          <h3>POS software builder</h3>
+          <p>
+            Build your POS in sandbox with ORBI SDKs. Each shop that receives money must connect its own ORBI
+            merchant payment profile before live payments are allowed.
+          </p>
+        </div>
+        <div className="detail-card">
+          <h3>SACCOS or organization</h3>
+          <p>
+            Keep your own members and services in your platform. Use ORBI-approved scopes to link financial
+            profiles, start payments, and receive signed payment updates.
+          </p>
+        </div>
+      </div>
       <div className="panel wide-panel">
         <PanelHeader title="What This Account Can Use" />
         {selectedService ? (
