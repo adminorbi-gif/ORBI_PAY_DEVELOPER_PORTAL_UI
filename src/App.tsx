@@ -1899,7 +1899,7 @@ function Docs({ state, config }: { state: PortalState; config: PortalConfig }) {
         <PanelHeader title="Maintained Docs Catalog" />
         <div className="docs-grid">
           {docs.length ? docs.map((doc, index) => <DocCard item={doc} baseUrl={config.baseUrl} key={String(doc.id || index)} />) : (
-            <EmptyState title="No docs catalog returned" detail="Requires /v1/developer/docs-catalog." />
+            <EmptyState title="Documentation is temporarily unavailable" detail="Refresh the page or try again shortly." />
           )}
         </div>
       </div>
@@ -1915,7 +1915,7 @@ function Docs({ state, config }: { state: PortalState; config: PortalConfig }) {
               Open <ExternalLink size={14} />
             </a>,
           ])}
-          empty="No SDK catalog returned."
+          empty="SDK information is temporarily unavailable."
         />
       </div>
       <div className="panel code-panel">
