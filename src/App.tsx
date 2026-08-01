@@ -3429,6 +3429,7 @@ function PortalModal({
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
   const [serviceCode, setServiceCode] = useState('');
+  const [issuedSecret, setIssuedSecret] = useState<Record<string, unknown>>();
 
   const submitApplication = async () => {
     setWorking(true);
@@ -3462,7 +3463,8 @@ function PortalModal({
     const reason = `Issue ${config.environment} API key for ${serviceCode.trim()}.`;
     if (!window.confirm(`${reason}\n\nContinue?`)) return;
     setWorking(true);
-    const result = await gatewayRequest(config, `/v1/developer/services/${encodeURIComponent(serviceCode.trim())}/api-keys/issue`, 'operator', {
+    setIssuedSecret(undefined);
+    const result = await gatewayRequest<Record<string, unknown>>(config, `/v1/developer/services/${encodeURIComponent(serviceCode.trim())}/api-keys/issue`, 'operator', {
       method: 'POST',
       portalConfirmationAccepted: true,
       portalReason: reason,
@@ -3472,7 +3474,12 @@ function PortalModal({
         reason,
       }),
     });
-    setMessage(result.ok ? 'API key issued. Copy the one-time secret from the response in secure operator flow.' : result.error);
+    if (result.ok) {
+      setIssuedSecret(result.data || {});
+      setMessage('API key issued. Copy it now and store it securely.');
+    } else {
+      setMessage(result.error);
+    }
     setWorking(false);
     if (result.ok) refresh();
   };
@@ -3507,6 +3514,19 @@ function PortalModal({
             <button className="button-primary full" onClick={issueKey} disabled={working}>
               <Copy size={17} /> {working ? 'Issuing' : 'Issue key'}
             </button>
+            {issuedSecret && (
+              <SecretCodePanel
+                title="Copy this key now"
+                subtitle="This secret is shown once only. Store it in server secret storage before closing."
+                metadata={[
+                  { label: 'Environment', value: issuedSecret.environment || config.environment },
+                  { label: 'API key id', value: objectValue(issuedSecret.apiKey).keyId, masked: true },
+                ]}
+                rows={[
+                  { label: 'ORBI_PAY_SERVICE_KEY', value: issuedSecret.oneTimeSecret || issuedSecret.apiKeySecret },
+                ]}
+              />
+            )}
           </>
         )}
         {message && <div className="inline-message">{message}</div>}
