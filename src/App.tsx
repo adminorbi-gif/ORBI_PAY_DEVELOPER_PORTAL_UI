@@ -21,10 +21,12 @@ import {
   fetchPortalSnapshot,
   gatewayRequest,
   getPortalConfig,
+  completePortalPasswordReset,
   loginPortalWithOtp,
   logoutPortal,
   portalRealtimeUrl,
   readStoredPortalSession,
+  requestPortalPasswordReset,
   resendPortalDeveloperEmail,
   signupPortalDeveloper,
   startPortalMfaEnrollment,
@@ -50,6 +52,7 @@ import {
 import { Environment, navItems, SectionId, StatusTone } from './data';
 
 type PortalRole = 'public_developer' | 'developer' | 'operator' | 'admin';
+type AuthMode = 'signin' | 'signup' | 'forgot' | 'reset';
 
 const titleFor: Record<SectionId, string> = {
   overview: 'BaaS Operations',
@@ -134,8 +137,8 @@ export function App() {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<'service' | 'key' | null>(null);
-  const [authOpen, setAuthOpen] = useState(() => Boolean(initialQuery.get('invite_token')));
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>(initialQuery.get('admin') === 'true' ? 'signin' : 'signin');
+  const [authOpen, setAuthOpen] = useState(() => Boolean(initialQuery.get('invite_token') || initialQuery.get('resetToken')));
+  const [authMode, setAuthMode] = useState<AuthMode>(initialQuery.get('resetToken') ? 'reset' : 'signin');
   const [mfaStepUpOpen, setMfaStepUpOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -4731,13 +4734,15 @@ function AuthModal({
   onSignedIn,
 }: {
   config: PortalConfig;
-  initialMode: 'signin' | 'signup';
+  initialMode: AuthMode;
   onClose: () => void;
   onSignedIn: (session: PortalSession) => void;
 }) {
   const initialInviteToken = new URLSearchParams(window.location.search).get('invite_token') || '';
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialInviteToken ? 'signup' : initialMode);
+  const initialResetToken = new URLSearchParams(window.location.search).get('resetToken') || '';
+  const [mode, setMode] = useState<AuthMode>(initialResetToken ? 'reset' : initialInviteToken ? 'signup' : initialMode);
   const [inviteToken, setInviteToken] = useState(initialInviteToken);
+  const [resetToken, setResetToken] = useState(initialResetToken);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -4755,9 +4760,10 @@ function AuthModal({
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
 
-  const switchMode = (nextMode: 'signin' | 'signup') => {
+  const switchMode = (nextMode: AuthMode) => {
     setMode(nextMode);
     if (nextMode === 'signin') setInviteToken('');
+    if (nextMode !== 'reset') setResetToken('');
     setSignupStep(1);
     setEmailVerificationRequired(false);
     setEmailVerificationCode('');
@@ -4887,6 +4893,30 @@ function AuthModal({
     setMessage(result.ok ? (result.data.nextStep || 'A new verification code has been requested.') : result.error);
   };
 
+  const requestPasswordReset = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    const result = await requestPortalPasswordReset(config, email);
+    setWorking(false);
+    setMessage(result.ok ? (result.data.nextStep || 'If the account exists, password reset instructions will be sent.') : result.error);
+  };
+
+  const completePasswordReset = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    const result = await completePortalPasswordReset(config, resetToken, password);
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    setPassword('');
+    setResetToken('');
+    setMode('signin');
+    window.history.replaceState({}, '', window.location.pathname);
+    setMessage(result.data.nextStep || 'Password changed. Sign in with your new password.');
+  };
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal-card auth-card">
@@ -4896,6 +4926,10 @@ function AuthModal({
             <strong>
               {mode === 'signin'
                 ? 'Signing in securely...'
+                : mode === 'forgot'
+                  ? 'Preparing recovery...'
+                  : mode === 'reset'
+                    ? 'Changing password...'
                 : emailVerificationRequired
                   ? 'Verifying your email...'
                   : inviteToken
@@ -4909,7 +4943,19 @@ function AuthModal({
           <X size={20} />
         </button>
         <p className="eyebrow">ORBI Developer Access</p>
-        <h2>{inviteToken ? 'Accept team invitation' : emailVerificationRequired ? 'Verify your email' : mode === 'signup' ? 'Create your developer account' : 'Sign in to ORBI Pay'}</h2>
+        <h2>
+          {inviteToken
+            ? 'Accept team invitation'
+            : emailVerificationRequired
+              ? 'Verify your email'
+              : mode === 'signup'
+                ? 'Create your developer account'
+                : mode === 'forgot'
+                  ? 'Recover your account'
+                  : mode === 'reset'
+                    ? 'Choose a new password'
+                    : 'Sign in to ORBI Pay'}
+        </h2>
         <p className="modal-copy">
           {inviteToken
             ? 'Create your own staff login. Your role and integration access are controlled by the invitation.'
@@ -4917,9 +4963,13 @@ function AuthModal({
             ? `Enter the 6-digit code sent to ${email}. The code expires in 15 minutes.`
             : mode === 'signup'
             ? 'Start in sandbox, test real ORBI payment flows safely, then request production access when your business is ready.'
+            : mode === 'forgot'
+            ? 'Enter your portal email. If the account exists and is verified, we will send secure reset instructions.'
+            : mode === 'reset'
+            ? 'Use a strong password. Existing portal sessions will be signed out after the password is changed.'
             : 'Use your developer, operator, or admin account to continue your ORBI integration work.'}
         </p>
-        {!emailVerificationRequired && !inviteToken && <div className="auth-tabs">
+        {!emailVerificationRequired && !inviteToken && (mode === 'signin' || mode === 'signup') && <div className="auth-tabs">
           <button className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}>Create account</button>
           <button className={mode === 'signin' ? 'active' : ''} onClick={() => switchMode('signin')}>Sign in</button>
         </div>}
@@ -5051,6 +5101,32 @@ function AuthModal({
             </div>
           )}
 
+          {!emailVerificationRequired && !inviteToken && mode === 'forgot' && (
+            <div className="auth-step">
+              <label>
+                Email
+                <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@business.com" autoComplete="email" />
+              </label>
+              <p className="signup-review-note">For security, we show the same confirmation whether or not the email exists.</p>
+            </div>
+          )}
+
+          {!emailVerificationRequired && !inviteToken && mode === 'reset' && (
+            <div className="auth-step">
+              <label>
+                New password
+                <PasswordField
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="At least 12 characters"
+                  autoComplete="new-password"
+                  hideLabel
+                />
+              </label>
+              <p className="signup-review-note">After reset, sign in again. If MFA is enabled, your authenticator or recovery code is still required.</p>
+            </div>
+          )}
+
           {!emailVerificationRequired && !inviteToken && mode === 'signin' && (
             <div className="auth-step">
               <label>
@@ -5100,6 +5176,13 @@ function AuthModal({
               >
                 {useRecoveryCode ? 'Use authenticator code' : 'Use a recovery code'}
               </button>
+              <button
+                className="mini-link auth-method-switch"
+                type="button"
+                onClick={() => switchMode('forgot')}
+              >
+                Forgot password?
+              </button>
             </div>
           )}
 
@@ -5119,6 +5202,24 @@ function AuthModal({
           <button className="button-primary full" onClick={acceptInvite} disabled={working || !username.trim() || password.length < 12}>
             {working ? 'Accepting invite' : 'Accept invitation'}
           </button>
+        ) : mode === 'forgot' ? (
+          <div className="auth-actions">
+            <button className="ghost-action" onClick={() => switchMode('signin')} disabled={working}>
+              <ArrowLeft size={16} /> Back
+            </button>
+            <button className="button-primary" onClick={requestPasswordReset} disabled={working || !email.trim()}>
+              {working ? 'Sending' : 'Send reset link'}
+            </button>
+          </div>
+        ) : mode === 'reset' ? (
+          <div className="auth-actions">
+            <button className="ghost-action" onClick={() => switchMode('signin')} disabled={working}>
+              Back to sign in
+            </button>
+            <button className="button-primary" onClick={completePasswordReset} disabled={working || !resetToken || password.length < 12}>
+              {working ? 'Changing password' : 'Change password'}
+            </button>
+          </div>
         ) : mode === 'signup' ? (
           <div className="auth-actions">
             {signupStep > 1 && (

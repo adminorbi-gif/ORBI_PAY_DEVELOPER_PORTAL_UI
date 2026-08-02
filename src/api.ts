@@ -426,6 +426,48 @@ export async function resendPortalDeveloperEmail(
   }
 }
 
+export async function requestPortalPasswordReset(
+  config: PortalConfig,
+  email: string,
+): Promise<GatewayResult<{ accepted: boolean; nextStep?: string }>> {
+  try {
+    const resetUrl = `${window.location.origin}/?resetToken={token}`;
+    const response = await fetch(`${config.bffBaseUrl}/auth/signup`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'request_password_reset', email, resetUrl, environment: config.environment }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `Password reset failed with HTTP ${response.status}`), detail: body };
+    }
+    return { ok: true, data: unwrapGatewayEnvelope<{ accepted: boolean; nextStep?: string }>(body) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Unable to request password reset.', detail: error };
+  }
+}
+
+export async function completePortalPasswordReset(
+  config: PortalConfig,
+  token: string,
+  password: string,
+): Promise<GatewayResult<{ reset: boolean; sessionsRevoked?: boolean; nextStep?: string }>> {
+  try {
+    const response = await fetch(`${config.bffBaseUrl}/auth/signup`, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'complete_password_reset', token, password, environment: config.environment }),
+    });
+    const body = await response.json().catch(() => null);
+    if (!response.ok) {
+      return { ok: false, status: response.status, error: String(body?.error || `Password reset failed with HTTP ${response.status}`), detail: body };
+    }
+    return { ok: true, data: unwrapGatewayEnvelope<{ reset: boolean; sessionsRevoked?: boolean; nextStep?: string }>(body) };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Unable to change password.', detail: error };
+  }
+}
+
 export async function validatePortalSession(config: PortalConfig): Promise<GatewayResult<Omit<PortalSession, 'token'>>> {
   if (!config.sessionToken) return { ok: false, status: 401, error: 'No active portal session.' };
   try {
