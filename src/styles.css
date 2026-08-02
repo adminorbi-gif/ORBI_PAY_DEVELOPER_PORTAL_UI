@@ -851,6 +851,67 @@ a {
   letter-spacing: -0.035em;
 }
 
+.domain-verification-box {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid rgba(44, 116, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(44, 116, 255, 0.05);
+}
+
+.domain-verification-box div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.domain-verification-box strong {
+  font-size: 13px;
+}
+
+.domain-verification-box span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.domain-verification-action {
+  display: grid;
+  gap: 10px;
+}
+
+.verification-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.verification-step {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid rgba(31, 122, 140, 0.18);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.verification-step span,
+.verification-step code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.verification-step code {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #0e1f2a;
+  color: #e7f7f5;
+  font-size: 0.78rem;
+}
+
 .service-actions,
 .row-actions {
   display: flex;

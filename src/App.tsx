@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Copy,
   ExternalLink,
+  Globe,
   Menu,
   Play,
   Plus,
@@ -695,6 +696,15 @@ function ServiceCard({ config, service, refresh, role }: { config: PortalConfig;
   const webhookUrls = arrayValue(service, 'webhookUrls', 'webhook_urls');
   const metadata = objectValue(service.metadata);
   const merchant = objectValue(metadata.merchant);
+  const requiredDomains = uniqueStrings([
+    ...browserOrigins.map(hostnameFromUrl),
+    ...redirectUrls.map(hostnameFromUrl),
+    ...webhookUrls.map(hostnameFromUrl),
+  ].filter(Boolean));
+  const verifiedDomains = arrayValue(objectValue(metadata.domainVerification), 'verifiedDomains', 'verified_domains')
+    .map((item) => item.toLowerCase());
+  const missingDomains = requiredDomains.filter((domain) => !verifiedDomains.includes(domain));
+  const hasLive = arrayValue(service, 'environments').includes('live');
 
   return (
     <article className="service-card">
@@ -711,8 +721,115 @@ function ServiceCard({ config, service, refresh, role }: { config: PortalConfig;
       <InfoLine label="Redirect URLs" value={String(redirectUrls.length)} />
       <InfoLine label="Payment update URLs" value={String(webhookUrls.length)} />
       <InfoLine label="Merchant profile" value={String(merchant.merchantIdEnv || 'Not configured')} />
-      {['operator', 'admin'].includes(role) && <ServiceStatusActions config={config} serviceCode={code} status={String(service.status || '')} refresh={refresh} />}
+      {hasLive && (
+        <div className="domain-verification-box">
+          <div>
+            <strong>{missingDomains.length ? 'Domain verification needed' : 'Domains verified'}</strong>
+            <span>{missingDomains.length ? missingDomains.join(', ') : verifiedDomains.join(', ') || 'No live domains supplied'}</span>
+          </div>
+          <StatusPill tone={missingDomains.length ? 'warning' : 'success'}>
+            {missingDomains.length ? 'Before live keys' : 'Ready for live keys'}
+          </StatusPill>
+        </div>
+      )}
+      {hasLive && missingDomains.length > 0 && (
+        <DomainVerificationAction
+          config={config}
+          serviceCode={code}
+          domains={missingDomains}
+          refresh={refresh}
+        />
+      )}
+      {['operator', 'admin'].includes(role) && (
+        <>
+          <ServiceStatusActions config={config} serviceCode={code} status={String(service.status || '')} refresh={refresh} />
+        </>
+      )}
     </article>
+  );
+}
+
+function DomainVerificationAction({
+  config,
+  serviceCode,
+  domains,
+  refresh,
+}: {
+  config: PortalConfig;
+  serviceCode: string;
+  domains: string[];
+  refresh: () => void;
+}) {
+  const [message, setMessage] = useState<string>();
+  const [working, setWorking] = useState(false);
+  const [instructions, setInstructions] = useState<Record<string, unknown>>();
+
+  const loadInstructions = async () => {
+    setWorking(true);
+    const result = await gatewayRequest<Record<string, unknown>>(
+      config,
+      `/v1/developer/services/${encodeURIComponent(serviceCode)}/domain-verification`,
+      'operator',
+    );
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    setInstructions(result.data);
+    setMessage('Add one proof method for each domain, then press Verify now.');
+  };
+
+  const verify = async () => {
+    setWorking(true);
+    const result = await gatewayRequest<Record<string, unknown>>(config, `/v1/developer/services/${encodeURIComponent(serviceCode)}/domain-verification`, 'operator', {
+      method: 'POST',
+      body: JSON.stringify({
+        domains,
+      }),
+    });
+    setWorking(false);
+    if (!result.ok) {
+      setMessage(result.error);
+      return;
+    }
+    const pending = Array.isArray((result.data as { pending?: unknown[] }).pending)
+      ? (result.data as { pending?: unknown[] }).pending || []
+      : [];
+    setInstructions((result.data as { domainVerification?: Record<string, unknown> }).domainVerification);
+    setMessage(pending.length ? 'Verification proof not found yet. Check DNS/HTTPS setup and try again.' : 'Domains verified. Live keys can now be issued.');
+    if (!pending.length) refresh();
+  };
+
+  const challenges = Array.isArray((instructions as { challenges?: unknown[] } | undefined)?.challenges)
+    ? ((instructions as { challenges?: unknown[] }).challenges || []) as Array<Record<string, unknown>>
+    : [];
+
+  return (
+    <div className="domain-verification-action">
+      <div className="row-actions">
+        <button className="ghost-action" disabled={working} onClick={loadInstructions}>
+          <Globe size={14} /> Setup verification
+        </button>
+        <button className="ghost-action" disabled={working} onClick={verify}>
+          <Check size={14} /> Verify now
+        </button>
+      </div>
+      {challenges.length > 0 && (
+        <div className="verification-steps">
+          {challenges.map((challenge) => (
+            <div key={String(challenge.domain)} className="verification-step">
+              <strong>{String(challenge.domain)}</strong>
+              <span>DNS TXT name: {String(challenge.dnsRecordName)}</span>
+              <code>{String(challenge.dnsRecordValue)}</code>
+              <span>Or HTTPS file: {String(challenge.httpsUrl)}</span>
+              <code>{String(challenge.token)}</code>
+            </div>
+          ))}
+        </div>
+      )}
+      {message && <small>{message}</small>}
+    </div>
   );
 }
 
@@ -3633,6 +3750,18 @@ function valueOf(record: Record<string, unknown>, ...keys: string[]) {
 function arrayValue(record: Record<string, unknown>, ...keys: string[]) {
   const value = valueOf(record, ...keys);
   return Array.isArray(value) ? value.map(String) : [];
+}
+
+function uniqueStrings(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function hostnameFromUrl(value: string) {
+  try {
+    return new URL(value).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
 }
 
 function objectValue(value: unknown): Record<string, unknown> {
