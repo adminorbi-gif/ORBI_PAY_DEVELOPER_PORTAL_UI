@@ -3531,6 +3531,77 @@ textarea {
   line-height: 1.5;
 }
 
+/* Final staff theme guard: keep operations UI light, readable, and consistent. */
+.staff-shell .sidebar {
+  background:
+    linear-gradient(180deg, rgba(245, 251, 248, 0.98), rgba(236, 247, 242, 0.96));
+  border-right-color: rgba(203, 225, 217, 0.92);
+}
+
+.staff-shell .brand-name,
+.staff-shell .nav-item {
+  color: #10201b;
+}
+
+.staff-shell .brand-subtitle {
+  color: #64748b;
+}
+
+.staff-shell .environment-context.staff {
+  background: #ecfdf5;
+  border-color: #bbf7d0;
+  color: #0f172a;
+}
+
+.staff-shell .environment-context.staff span {
+  color: #0f766e;
+}
+
+.staff-shell .environment-context.staff strong {
+  color: #10201b;
+}
+
+.staff-shell .nav-item:hover {
+  color: #075e50;
+  background: rgba(220, 252, 231, 0.72);
+}
+
+.staff-shell .nav-item.active {
+  color: #052e27;
+  background: #dffced;
+}
+
+.staff-shell .sidebar-user,
+.staff-shell .role-badge {
+  background: #ffffff;
+  border-color: rgba(203, 225, 217, 0.96);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.06);
+}
+
+.staff-shell .sidebar-user strong,
+.staff-shell .role-badge strong {
+  color: #10201b;
+}
+
+.staff-shell .sidebar-user small,
+.staff-shell .role-badge span {
+  color: #0f766e;
+}
+
+.staff-shell .sidebar-user span {
+  color: #64748b;
+}
+
+.sidebar-user > div:nth-child(2) {
+  min-width: 0;
+}
+
+.sidebar-user strong,
+.sidebar-user small,
+.sidebar-user span {
+  max-width: 174px;
+}
+
 @media (max-width: 1100px) {
   .app-shell {
     grid-template-columns: 1fr;

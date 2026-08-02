@@ -117,6 +117,7 @@ export function App() {
   const [session, setSession] = useState<PortalSession | undefined>(() => readStoredPortalSession());
   const role = session?.user.role || 'public_developer';
   const currentRole = roleMeta[role];
+  const profileInitials = initialsFor(session?.user.name || session?.user.email || currentRole.label);
   const requestedEnvironment = initialQuery.get('env') === 'live' ? 'live' : 'sandbox';
   const [environment, setEnvironment] = useState<Environment>(
     initialQuery.get('admin') === 'true'
@@ -339,11 +340,11 @@ export function App() {
         </nav>
 
         <div className="sidebar-user">
-          <div className="avatar">{currentRole.initials}</div>
+          <div className="avatar">{profileInitials}</div>
           <div>
             <strong>{session?.user.name || currentRole.label}</strong>
-            <small>{currentRole.subtitle}</small>
-            <span>{roleCanManageServices(role) ? 'Staff operations access' : session ? 'Developer workspace' : 'Public developer guide'}</span>
+            <small>{session?.user.email || currentRole.subtitle}</small>
+            <span>{session ? `${roleLabel(role)} access` : 'Public developer guide'}</span>
           </div>
           {session ? (
             <button className="mini-link" onClick={signOut}>Logout</button>
@@ -470,6 +471,23 @@ function RoleBadge({ role }: { role: PortalRole }) {
 function roleToAccessLevel(role: PortalRole) {
   if (role === 'public_developer') return 'public';
   return role;
+}
+
+function roleLabel(role: PortalRole) {
+  if (role === 'admin') return 'Admin';
+  if (role === 'operator') return 'Operator';
+  if (role === 'developer') return 'Developer';
+  return 'Guest';
+}
+
+function initialsFor(value: string) {
+  const parts = value
+    .replace(/@.*/, '')
+    .split(/[\s._-]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const initials = parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join('');
+  return initials || 'OP';
 }
 
 function isSectionVisibleForRole(section: SectionId, role: PortalRole) {
