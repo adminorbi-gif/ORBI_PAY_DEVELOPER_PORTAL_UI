@@ -1014,6 +1014,7 @@ function Overview({ role, state, config, refresh }: { role: PortalRole; state: P
         <>
           <OperationsActionCenter config={config} snapshot={snapshot} refresh={refresh} />
           <ObservabilityPanel snapshot={snapshot} />
+          <UsageMeteringReadiness snapshot={snapshot} />
           <OperationsOverview snapshot={snapshot} />
           <RecentEvents events={snapshot?.events || []} />
         </>
@@ -1454,6 +1455,42 @@ function ObservabilityPanel({ snapshot }: { snapshot?: PortalSnapshot }) {
             <small>No unresolved integration impact returned.</small>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function UsageMeteringReadiness({ snapshot }: { snapshot?: PortalSnapshot }) {
+  const security = snapshot?.securitySummary;
+  const events = snapshot?.events || [];
+  const services = snapshot?.services || [];
+  const webhooks = snapshot?.webhookDeliveries || [];
+  const messages = snapshot?.messagingDeliveries || [];
+  const paymentEvents = events.filter((event) => /payment|intent|escrow|paysafe/i.test(String(event.eventType || event.action || ''))).length;
+  const failedRequests = Number(security?.blockedRequests || 0)
+    + Number(security?.signatureFailures || 0)
+    + Number(security?.idempotencyFailures || 0)
+    + Number(security?.originDenials || 0)
+    + Number(security?.rateLimitEvents || 0);
+  const activeDevelopers = (snapshot?.portalUsers || []).filter((user) => user.role === 'developer' && user.enabled !== false).length;
+  const activeServices = services.filter((service) => String(service.status || '').toLowerCase() === 'active').length;
+  const updateDeliveries = webhooks.length + messages.length;
+  const billingReady = Boolean(security?.apiCalls24h || events.length || updateDeliveries || activeServices);
+
+  return (
+    <div className="panel wide-panel metering-panel">
+      <PanelHeader title="Usage Metering Readiness" />
+      <p className="security-note">
+        Production billing and developer limits should be based on measured usage, failed request evidence,
+        payment activity, and delivery volume. This panel shows the current metering signals available to operators.
+      </p>
+      <div className="observability-grid">
+        <MetricCard label="API calls" value={String(security?.apiCalls24h || events.length)} tone="info" detail="Current activity signal for developer usage" />
+        <MetricCard label="Payment activity" value={String(paymentEvents)} tone={paymentEvents ? 'success' : 'info'} detail="Payment, intent, escrow, or PaySafe events" />
+        <MetricCard label="Update volume" value={String(updateDeliveries)} tone="info" detail="Webhook and security message delivery records" />
+        <MetricCard label="Failed requests" value={String(failedRequests)} tone={failedRequests ? 'warning' : 'success'} detail="Denied, invalid, replay, origin, or rate-limit signals" />
+        <MetricCard label="Active developers" value={String(activeDevelopers)} tone="success" detail="Enabled developer accounts" />
+        <MetricCard label="Billing readiness" value={billingReady ? 'Ready' : 'Waiting'} tone={billingReady ? 'success' : 'warning'} detail="Signals available for plan and invoice rules" />
       </div>
     </div>
   );
