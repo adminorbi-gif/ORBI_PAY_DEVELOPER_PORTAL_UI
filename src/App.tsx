@@ -438,7 +438,7 @@ export function App() {
                 }
                 if (event.key === 'Escape') setSearchOpen(false);
               }}
-              placeholder="Search integrations, permissions, activity..."
+              placeholder={roleCanManageServices(role) ? 'Search accounts, integrations, alerts, activity...' : 'Search docs, SDKs, permissions...'}
             />
             {searchOpen && searchQuery.trim() ? (
               <div className="search-results" role="listbox">
@@ -460,7 +460,7 @@ export function App() {
             ) : null}
           </div>
           <h1>{docsRouteOpen ? 'Developer Docs' : titleFor[section]}</h1>
-          <EnvironmentSwitch environment={environment} role={role} />
+          {!roleCanManageServices(role) && <EnvironmentSwitch environment={environment} role={role} />}
           {roleCanManageServices(role) ? (
             <button className="primary-action" onClick={() => setModal('service')}>
               <Plus size={18} />
@@ -803,9 +803,9 @@ function EnterpriseCommandStrip({
         <small>{roleMeta[role].subtitle}</small>
       </div>
       <div className="command-card">
-        <span>{isStaff ? 'Scope' : 'Environment'}</span>
-        <strong>{isStaff ? 'General control' : environment === 'live' ? 'Production' : 'Sandbox'}</strong>
-        <small>{isStaff ? 'All approved operations areas' : environment === 'live' ? 'Real customer payments' : 'Safe test payments'}</small>
+        <span>{isStaff ? 'Control center' : 'Environment'}</span>
+        <strong>{isStaff ? 'All operations' : environment === 'live' ? 'Production' : 'Sandbox'}</strong>
+        <small>{isStaff ? 'Developers, access, credentials, incidents, webhooks, and audit' : environment === 'live' ? 'Real customer payments' : 'Safe test payments'}</small>
       </div>
       <div className="command-card">
         <span>{isStaff ? 'Management' : 'Next step'}</span>
@@ -1621,6 +1621,9 @@ function AccessRequestPanel({
   const [reason, setReason] = useState('');
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
+  const availableCapabilities = accessCapabilities.filter((capability) =>
+    !granted.includes(capability.scope) && !pending.includes(capability.scope),
+  );
   const canRequestScope = Boolean(serviceCode)
     && role !== 'public_developer'
     && requestedScopes.length > 0
@@ -1659,6 +1662,16 @@ function AccessRequestPanel({
         Choose the ORBI feature your integration needs. ORBI reviews sensitive payment features before enabling them.
       </p>
       <label>Integration code<input value={serviceCode || 'No integration assigned'} readOnly /></label>
+      {serviceCode && availableCapabilities.length === 0 && (
+        <div className="inline-message success">
+          This integration has no new permissions available to request. Granted and pending permissions are locked for audit safety.
+        </div>
+      )}
+      {!serviceCode && (
+        <div className="inline-message danger">
+          Create or select an integration before requesting permissions.
+        </div>
+      )}
       <div className="access-grid">
         {accessCapabilities.map((capability) => {
           const isGranted = granted.includes(capability.scope);
