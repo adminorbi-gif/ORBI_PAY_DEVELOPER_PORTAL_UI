@@ -2143,6 +2143,28 @@ tr:last-child td {
   max-width: 980px;
 }
 
+.copy-code-block {
+  position: relative;
+  max-width: 980px;
+}
+
+.copy-code-block button {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 10px;
+  color: #d1fae5;
+  font-size: 11px;
+  font-weight: 900;
+  border: 1px solid rgba(110, 231, 183, 0.24);
+  border-radius: 999px;
+  background: rgba(2, 6, 23, 0.86);
+}
+
 .docs-context-note {
   min-width: 0;
   padding: 0 0 18px;
@@ -2745,6 +2767,109 @@ textarea {
   border-color: rgba(220, 38, 38, 0.48);
 }
 
+.application-status-panel,
+.production-readiness {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 18px;
+}
+
+.status-stack {
+  display: grid;
+  justify-items: end;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.rejection-reason {
+  display: grid;
+  gap: 5px;
+  max-width: 760px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  border-radius: 16px;
+  background: rgba(254, 242, 242, 0.78);
+}
+
+.rejection-reason span {
+  color: #7f1d1d;
+  overflow-wrap: anywhere;
+}
+
+.readiness-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.readiness-list > div {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #f8fbfa;
+}
+
+.readiness-list > div.ready {
+  border-color: rgba(16, 185, 129, 0.24);
+  background: #ecfdf5;
+}
+
+.readiness-list svg {
+  margin-top: 2px;
+  color: #087f68;
+}
+
+.readiness-list .todo svg {
+  color: #b45309;
+}
+
+.readiness-list strong,
+.readiness-list span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.readiness-list span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.webhook-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #f8fbfa;
+}
+
+.webhook-toolbar div {
+  display: grid;
+  gap: 3px;
+}
+
+.webhook-toolbar span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.webhook-toolbar select {
+  width: min(220px, 100%);
+}
+
 /* Enterprise portal visual system */
 h1,
 h2,
@@ -3231,6 +3356,7 @@ textarea {
   .endpoint-grid,
   .method-grid,
   .phase-grid,
+  .readiness-list,
   .access-grid,
   .step-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3335,6 +3461,21 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .application-status-panel,
+  .production-readiness,
+  .webhook-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .application-status-panel,
+  .webhook-toolbar {
+    display: grid;
+  }
+
+  .status-stack {
+    justify-items: start;
+  }
+
   .key-safety-panel,
   .key-rule-grid {
     grid-template-columns: 1fr;
@@ -3410,6 +3551,10 @@ textarea {
   }
 
   .setup-step {
+    grid-template-columns: 1fr;
+  }
+
+  .readiness-list {
     grid-template-columns: 1fr;
   }
 

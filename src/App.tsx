@@ -1352,6 +1352,8 @@ function SandboxSetup({ config, state, refresh, role }: { config: PortalConfig; 
 
   return (
     <div className="stack">
+      <DeveloperApplicationStatusPanel state={state} role={role} />
+
       <div className="sandbox-banner">
         <AlertTriangle size={20} />
         <div>
@@ -1361,6 +1363,7 @@ function SandboxSetup({ config, state, refresh, role }: { config: PortalConfig; 
       </div>
 
       <BaasLaunchPhases state={state} role={role} />
+      <ProductionReadinessChecklist state={state} />
 
       <div className="panel wide-panel">
         <PanelHeader title="Sandbox Checklist" />
@@ -1414,6 +1417,51 @@ function SandboxSetup({ config, state, refresh, role }: { config: PortalConfig; 
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function DeveloperApplicationStatusPanel({ state, role }: { state: PortalState; role: PortalRole }) {
+  const applications = state.snapshot?.applications || [];
+  const services = state.snapshot?.services || [];
+  const sessionEmail = readStoredPortalSession()?.user.email?.toLowerCase();
+  const visibleApplications = roleCanManageServices(role)
+    ? applications
+    : applications.filter((app) => !sessionEmail || String(app.contactEmail || app.ownerEmail || '').toLowerCase() === sessionEmail);
+  const latest = [...visibleApplications].sort((a, b) =>
+    String(b.submittedAt || b.updatedAt || '').localeCompare(String(a.submittedAt || a.updatedAt || '')),
+  )[0];
+  const liveServices = services.filter((service) => arrayValue(service, 'environments').includes('live'));
+  const sandboxServices = services.filter((service) => arrayValue(service, 'environments').includes('sandbox'));
+
+  if (!latest && !services.length) return null;
+
+  const status = String(latest?.status || (services.length ? 'approved' : 'unknown')).toLowerCase();
+  const reason = String(latest?.decisionReason || latest?.reason || '').trim();
+  const nextAction = status === 'rejected'
+    ? 'Fix the review note, then submit a new request.'
+    : status === 'pending_review'
+      ? 'ORBI is reviewing your request. Keep testing safely in sandbox while you wait.'
+      : liveServices.length
+        ? 'Production access is enabled. Complete the go-live checklist before launch.'
+        : sandboxServices.length
+          ? 'Sandbox is ready. Run tests, then request production access.'
+          : 'Create a sandbox integration to begin.';
+
+  return (
+    <div className="panel wide-panel application-status-panel">
+      <div>
+        <p className="eyebrow">Your access status</p>
+        <h2>{status === 'rejected' ? 'Request needs changes' : status === 'pending_review' ? 'Request under review' : 'Integration access ready'}</h2>
+        <p>{nextAction}</p>
+        {reason && <div className="rejection-reason"><strong>Review note</strong><span>{reason}</span></div>}
+      </div>
+      <div className="status-stack">
+        <StatusPill tone={status === 'rejected' ? 'danger' : status === 'pending_review' ? 'warning' : 'success'}>
+          {status.replace(/_/g, ' ')}
+        </StatusPill>
+        <small>{latest?.submittedAt ? `Submitted ${new Date(String(latest.submittedAt)).toLocaleString()}` : `${services.length} approved integration${services.length === 1 ? '' : 's'}`}</small>
       </div>
     </div>
   );
@@ -1490,6 +1538,79 @@ function BaasLaunchPhases({ state, role }: { state: PortalState; role: PortalRol
             <h3>{phase.title}</h3>
             <p>{phase.detail}</p>
             <small>{phase.ready ? 'Completed for at least one integration.' : phase.next}</small>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProductionReadinessChecklist({ state }: { state: PortalState }) {
+  const services = state.snapshot?.services || [];
+  const applications = state.snapshot?.applications || [];
+  const webhookDeliveries = state.snapshot?.webhookDeliveries || [];
+  const liveServices = services.filter((service) => arrayValue(service, 'environments').includes('live'));
+  const targetService = liveServices[0] || services[0];
+  const browserOrigins = targetService ? arrayValue(targetService, 'browserOrigins', 'browser_origins') : [];
+  const redirectUrls = targetService ? arrayValue(targetService, 'redirectUrls', 'redirect_urls') : [];
+  const webhookUrls = targetService ? arrayValue(targetService, 'webhookUrls', 'webhook_urls') : [];
+  const metadata = objectValue(targetService?.metadata);
+  const verifiedDomains = arrayValue(objectValue(metadata.domainVerification), 'verifiedDomains', 'verified_domains')
+    .map((item) => item.toLowerCase());
+  const requiredDomains = uniqueStrings([
+    ...browserOrigins.map(hostnameFromUrl),
+    ...redirectUrls.map(hostnameFromUrl),
+    ...webhookUrls.map(hostnameFromUrl),
+  ].filter(Boolean));
+  const liveRequest = applications.some((app) => arrayValue(app, 'requestedEnvironments', 'requested_environments').includes('live'));
+  const checklist = [
+    {
+      title: 'Sandbox integration created',
+      ready: services.some((service) => arrayValue(service, 'environments').includes('sandbox')) || applications.length > 0,
+      detail: 'Create an app and test before live.',
+    },
+    {
+      title: 'Production request submitted',
+      ready: liveRequest || liveServices.length > 0,
+      detail: 'Submit business name, domain, return URL, and payment update URL.',
+    },
+    {
+      title: 'Domains verified',
+      ready: requiredDomains.length > 0 && requiredDomains.every((domain) => verifiedDomains.includes(domain)),
+      detail: requiredDomains.length ? requiredDomains.join(', ') : 'Add live website, return, and payment update domains.',
+    },
+    {
+      title: 'Live keys active',
+      ready: liveServices.some((service) => String(valueOf(service, 'keyStatus', 'key_status') || '').toLowerCase() === 'active'),
+      detail: 'Keys are shown once. Store them server-side only.',
+    },
+    {
+      title: 'Payment update tested',
+      ready: webhookDeliveries.some((delivery) => String(delivery.status || '').toLowerCase() === 'delivered'),
+      detail: 'Use verified webhooks as payment truth.',
+    },
+  ];
+
+  return (
+    <div className="panel wide-panel production-readiness">
+      <div className="phase-panel-head">
+        <div>
+          <p className="eyebrow">Production readiness</p>
+          <h2>Go live only when every safety check is green.</h2>
+          <p>This checklist is based on your real integration state, not manual notes.</p>
+        </div>
+        <StatusPill tone={checklist.every((item) => item.ready) ? 'success' : 'warning'}>
+          {checklist.every((item) => item.ready) ? 'Ready to launch' : 'Action needed'}
+        </StatusPill>
+      </div>
+      <div className="readiness-list">
+        {checklist.map((item) => (
+          <div className={item.ready ? 'ready' : 'todo'} key={item.title}>
+            {item.ready ? <Check size={18} /> : <AlertTriangle size={18} />}
+            <div>
+              <strong>{item.title}</strong>
+              <span>{item.detail}</span>
+            </div>
           </div>
         ))}
       </div>
@@ -2359,8 +2480,14 @@ function ScopeDecisionQueue({
 function Webhooks({ config, state, refresh, role }: { config: PortalConfig; state: PortalState; refresh: () => void; role: PortalRole }) {
   const [replaying, setReplaying] = useState<string>();
   const [message, setMessage] = useState<string>();
+  const [statusFilter, setStatusFilter] = useState('all');
   const deliveries = state.snapshot?.webhookDeliveries || [];
   const messageDeliveries = state.snapshot?.messagingDeliveries || [];
+  const filteredDeliveries = statusFilter === 'all'
+    ? deliveries
+    : deliveries.filter((delivery) => String(delivery.status || '').toLowerCase() === statusFilter);
+  const failedCount = deliveries.filter((delivery) => String(delivery.status || '').toLowerCase() === 'failed').length;
+  const deliveredCount = deliveries.filter((delivery) => String(delivery.status || '').toLowerCase() === 'delivered').length;
 
   const replay = async (deliveryId: string) => {
     const reason = `Replay webhook delivery ${deliveryId}.`;
@@ -2381,11 +2508,24 @@ function Webhooks({ config, state, refresh, role }: { config: PortalConfig; stat
     <div className="stack">
       <div className="panel wide-panel">
         <PanelHeader title="Payment Update Delivery" action="Refresh" onAction={refresh} />
+        <div className="webhook-toolbar">
+          <div>
+            <strong>Verified payment updates</strong>
+            <span>{deliveredCount} delivered · {failedCount} need attention</span>
+          </div>
+          <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+            <option value="all">All updates</option>
+            <option value="delivered">Delivered</option>
+            <option value="failed">Failed</option>
+            <option value="pending">Pending</option>
+          </select>
+        </div>
         {message && <div className="inline-message">{message}</div>}
         <DataTable
           columns={['Update ID', 'Type', 'Payment', 'Status', 'HTTP', 'Attempts', 'Action']}
-          rows={deliveries.map((delivery) => {
+          rows={filteredDeliveries.map((delivery) => {
             const deliveryId = String(delivery.deliveryId || delivery.id || '-');
+            const status = String(delivery.status || '').toLowerCase();
             return [
               <Copyable value={deliveryId} />,
               String(delivery.eventType || '-'),
@@ -2393,12 +2533,12 @@ function Webhooks({ config, state, refresh, role }: { config: PortalConfig; stat
               <StatusPill tone={toneFromStatus(delivery.status)}>{String(delivery.status || 'unknown')}</StatusPill>,
               String(delivery.httpStatus || delivery.statusCode || '-'),
               String(delivery.attempts || delivery.attempt || 0),
-              <button className="ghost-action" disabled={deliveryId === '-' || replaying === deliveryId} onClick={() => replay(deliveryId)}>
+              <button className="ghost-action" disabled={deliveryId === '-' || status === 'delivered' || replaying === deliveryId} onClick={() => replay(deliveryId)}>
                 <RotateCcw size={15} /> Replay
               </button>,
             ];
           })}
-          empty="No payment updates yet."
+          empty={statusFilter === 'all' ? 'No payment updates yet.' : `No ${statusFilter} payment updates.`}
         />
       </div>
 
@@ -3390,11 +3530,22 @@ function DocReader({ item, docsHomeHref }: { item: Record<string, unknown>; docs
           <section className="doc-section" id={`section-${index + 1}`} key={`${String(item.id || 'doc')}-${index}`}>
             <h3>{String(section.heading || `Step ${index + 1}`)}</h3>
             <p>{String(section.body || '')}</p>
-            {section.code ? <pre>{String(section.code)}</pre> : null}
+            {section.code ? <CopyCodeBlock code={String(section.code)} /> : null}
           </section>
         ))}
       </div>
     </article>
+  );
+}
+
+function CopyCodeBlock({ code }: { code: string }) {
+  return (
+    <div className="copy-code-block">
+      <button type="button" onClick={() => void navigator.clipboard?.writeText(code)}>
+        <Copy size={13} /> Copy
+      </button>
+      <pre>{code}</pre>
+    </div>
   );
 }
 
@@ -3519,6 +3670,10 @@ function SecretCodePanel({
 }) {
   const visibleRows = rows.filter((row) => String(row.value || '').trim());
   const visibleMetadata = (metadata || []).filter((row) => String(row.value || '').trim());
+  const copyAll = () => {
+    const text = visibleRows.map((row) => `${row.label}=${String(row.value)}`).join('\n');
+    if (text) void navigator.clipboard?.writeText(text);
+  };
   return (
     <div className={`secret-code-panel ${compact ? 'compact' : ''}`}>
       <div className="secret-code-toolbar">
@@ -3526,7 +3681,10 @@ function SecretCodePanel({
           <strong>{title}</strong>
           <span>{subtitle}</span>
         </div>
-        <StatusPill tone="warning">Shown once</StatusPill>
+        <div className="row-actions">
+          <button className="mini-copy" type="button" onClick={copyAll}>Copy all</button>
+          <StatusPill tone="warning">Shown once</StatusPill>
+        </div>
       </div>
       {visibleMetadata.length > 0 && (
         <div className="secret-code-meta">
