@@ -673,6 +673,16 @@ function formatShortDate(value: string) {
   });
 }
 
+function dateMs(value?: string) {
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isFinite(time) ? time : 0;
+}
+
+function percentOf(part: number, total: number) {
+  if (!total) return '100%';
+  return `${Math.round((part / total) * 100)}%`;
+}
+
 function messageThreadId(delivery: MessagingDelivery) {
   const metaThread = delivery.safeMetadata?.threadId;
   return String(delivery.threadId || (typeof metaThread === 'string' ? metaThread : '') || delivery.serviceCode || delivery.recipientIdentityRef || delivery.eventId || 'general');
@@ -1003,6 +1013,7 @@ function Overview({ role, state, config, refresh }: { role: PortalRole; state: P
       {isStaff ? (
         <>
           <OperationsActionCenter config={config} snapshot={snapshot} refresh={refresh} />
+          <ObservabilityPanel snapshot={snapshot} />
           <OperationsOverview snapshot={snapshot} />
           <RecentEvents events={snapshot?.events || []} />
         </>
@@ -1375,6 +1386,73 @@ function OperationsActionCenter({
             );
           })}
           {!riskyServices.length && <small>No active service returned for risk action.</small>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ObservabilityPanel({ snapshot }: { snapshot?: PortalSnapshot }) {
+  const events = snapshot?.events || [];
+  const webhooks = snapshot?.webhookDeliveries || [];
+  const messages = snapshot?.messagingDeliveries || [];
+  const now = Date.now();
+  const recentEvents = events.filter((event) => dateMs(String(event.occurredAt || event.createdAt || '')) > now - 24 * 60 * 60 * 1000);
+  const deliveredWebhooks = webhooks.filter((delivery) => String(delivery.status || '').toLowerCase() === 'delivered').length;
+  const failedWebhooks = webhooks.filter((delivery) => String(delivery.status || '').toLowerCase() === 'failed').length;
+  const deliveredMessages = messages.filter((delivery) => ['sent', 'delivered', 'queued'].includes(String(delivery.status || '').toLowerCase())).length;
+  const failedMessages = messages.filter((delivery) => String(delivery.status || '').toLowerCase() === 'failed').length;
+  const activityBuckets = Array.from({ length: 6 }, (_, index) => {
+    const end = now - (5 - index) * 4 * 60 * 60 * 1000;
+    const start = end - 4 * 60 * 60 * 1000;
+    const count = events.filter((event) => {
+      const time = dateMs(String(event.occurredAt || event.createdAt || ''));
+      return time >= start && time < end;
+    }).length;
+    return { label: `${new Date(start).getHours()}:00`, count };
+  });
+  const maxBucket = Math.max(1, ...activityBuckets.map((bucket) => bucket.count));
+  const serviceImpact = new Map<string, number>();
+  for (const delivery of webhooks) {
+    if (String(delivery.status || '').toLowerCase() !== 'failed') continue;
+    const key = String(delivery.serviceCode || delivery.resourceId || delivery.eventType || 'unknown');
+    serviceImpact.set(key, (serviceImpact.get(key) || 0) + 1);
+  }
+  for (const incident of snapshot?.incidents || []) {
+    if (String(incident.status || '').toLowerCase() === 'resolved') continue;
+    const key = String(incident.resource?.serviceCode || incident.metadata?.serviceCode || incident.incidentType || 'unknown');
+    serviceImpact.set(key, (serviceImpact.get(key) || 0) + 1);
+  }
+  const topImpact = [...serviceImpact.entries()].sort((a, b) => b[1] - a[1]).slice(0, 5);
+
+  return (
+    <div className="panel wide-panel observability-panel">
+      <PanelHeader title="Production Observability" />
+      <div className="observability-grid">
+        <MetricCard label="Activity 24h" value={String(recentEvents.length)} tone="info" detail="Recent audit and integration events" />
+        <MetricCard label="Webhook success" value={percentOf(deliveredWebhooks, deliveredWebhooks + failedWebhooks)} tone={failedWebhooks ? 'warning' : 'success'} detail={`${deliveredWebhooks} delivered · ${failedWebhooks} failed`} />
+        <MetricCard label="Message delivery" value={percentOf(deliveredMessages, deliveredMessages + failedMessages)} tone={failedMessages ? 'warning' : 'success'} detail={`${deliveredMessages} OK · ${failedMessages} failed`} />
+      </div>
+      <div className="observability-body">
+        <div className="activity-bars" aria-label="Activity trend">
+          {activityBuckets.map((bucket) => (
+            <div className="activity-bar" key={bucket.label}>
+              <span style={{ height: `${Math.max(10, (bucket.count / maxBucket) * 100)}%` }} />
+              <small>{bucket.label}</small>
+              <b>{bucket.count}</b>
+            </div>
+          ))}
+        </div>
+        <div className="impact-list">
+          <strong>Top affected integrations</strong>
+          {topImpact.length ? topImpact.map(([serviceCode, count]) => (
+            <div className="impact-row" key={serviceCode}>
+              <span>{serviceCode}</span>
+              <StatusPill tone={count > 2 ? 'danger' : 'warning'}>{count} signal{count === 1 ? '' : 's'}</StatusPill>
+            </div>
+          )) : (
+            <small>No unresolved integration impact returned.</small>
+          )}
         </div>
       </div>
     </div>

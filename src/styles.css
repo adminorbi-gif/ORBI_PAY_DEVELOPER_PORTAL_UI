@@ -1477,6 +1477,93 @@ a {
   line-height: 1.35;
 }
 
+.observability-panel {
+  background:
+    radial-gradient(circle at 100% 0%, rgba(8, 127, 104, 0.1), transparent 18rem),
+    var(--surface);
+}
+
+.observability-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.observability-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(260px, 0.6fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.activity-bars {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  min-height: 210px;
+  padding: 18px;
+  background: #f8fcfa;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+}
+
+.activity-bar {
+  display: grid;
+  grid-template-rows: 1fr auto auto;
+  justify-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.activity-bar span {
+  align-self: end;
+  width: 100%;
+  max-width: 42px;
+  border-radius: 999px 999px 8px 8px;
+  background: linear-gradient(180deg, #10b981, #087f68);
+  box-shadow: 0 12px 24px rgba(8, 127, 104, 0.18);
+}
+
+.activity-bar small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.activity-bar b {
+  font-size: 12px;
+}
+
+.impact-list {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 18px;
+  background: #f8fcfa;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+}
+
+.impact-list > strong {
+  font-size: 16px;
+}
+
+.impact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.impact-row span {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .incident-list {
   display: grid;
   gap: 14px;
@@ -4052,6 +4139,8 @@ textarea {
   .ops-grid,
   .ops-metric-grid,
   .action-center-grid,
+  .observability-grid,
+  .observability-body,
   .phase-grid,
   .readiness-list,
   .access-grid,
@@ -4167,6 +4256,8 @@ textarea {
   .health-grid,
   .service-grid,
   .action-center-grid,
+  .observability-grid,
+  .observability-body,
   .endpoint-grid,
   .method-grid,
   .incident-card,
