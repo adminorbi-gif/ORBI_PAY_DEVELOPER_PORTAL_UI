@@ -50,18 +50,18 @@ import { Environment, navItems, SectionId, StatusTone } from './data';
 type PortalRole = 'public_developer' | 'developer' | 'operator' | 'admin';
 
 const titleFor: Record<SectionId, string> = {
-  overview: 'Overview',
-  services: 'Integrations',
+  overview: 'BaaS Operations',
+  services: 'Integration Control',
   access: 'Get Access',
   sandbox: 'Sandbox',
-  keys: 'Keys & Secrets',
+  keys: 'Credential Vault',
   team: 'Team Access',
-  scopes: 'Permissions',
-  webhooks: 'Payment Updates',
-  health: 'System Checks',
-  incidents: 'Service Issues',
+  scopes: 'Access Control',
+  webhooks: 'Webhook Operations',
+  health: 'Gateway Health',
+  incidents: 'Risk & Incidents',
   docs: 'Docs & SDKs',
-  events: 'Activity Logs',
+  events: 'Audit Trail',
   runtime: 'SDK Setup',
 };
 
@@ -87,15 +87,15 @@ const roleMeta: Record<PortalRole, { label: string; subtitle: string; initials: 
   },
   operator: {
     label: 'ORBI Operator',
-    subtitle: 'Access and service control',
+    subtitle: 'BaaS operations desk',
     initials: 'OP',
-    policy: 'Operators can approve integrations, manage permissions, rotate keys, replay payment updates, and suspend risky accounts.',
+    policy: 'Operators run day-to-day BaaS controls: review access requests, verify domains, replay webhooks, rotate credentials, and pause risky integrations.',
   },
   admin: {
-    label: 'Admin / Risk',
-    subtitle: 'Governance console',
-    initials: 'AR',
-    policy: 'Admins review system checks, activity logs, payment update delivery, and high-risk integration states.',
+    label: 'ORBI Admin',
+    subtitle: 'Full BaaS control center',
+    initials: 'OA',
+    policy: 'Admins have full operational control across developer accounts, service access, credential lifecycle, webhook recovery, audit trails, incidents, and production readiness.',
   },
 };
 
@@ -108,7 +108,9 @@ const money = new Intl.NumberFormat('en-TZ', {
 export function App() {
   const docRouteId = docIdFromPath(window.location.pathname);
   const docsRouteOpen = window.location.pathname === '/docs' || Boolean(docRouteId);
-  const [section, setSection] = useState<SectionId>('overview');
+  const initialQuery = new URLSearchParams(window.location.search);
+  const initialSection = sectionFromQuery(initialQuery);
+  const [section, setSection] = useState<SectionId>(initialSection);
   const [session, setSession] = useState<PortalSession | undefined>(() => readStoredPortalSession());
   const role = session?.user.role || 'public_developer';
   const currentRole = roleMeta[role];
@@ -119,8 +121,8 @@ export function App() {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<'service' | 'key' | null>(null);
-  const [authOpen, setAuthOpen] = useState(() => Boolean(new URLSearchParams(window.location.search).get('invite_token')));
-  const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
+  const [authOpen, setAuthOpen] = useState(() => Boolean(initialQuery.get('invite_token')));
+  const [authMode, setAuthMode] = useState<'signin' | 'signup'>(initialQuery.get('admin') === 'true' ? 'signin' : 'signin');
   const [mfaStepUpOpen, setMfaStepUpOpen] = useState(false);
   const [portalState, setPortalState] = useState<PortalState>({ loading: true, errors: [] });
 
@@ -131,6 +133,28 @@ export function App() {
     const { snapshot, errors } = await fetchPortalSnapshot(config, roleToAccessLevel(role));
     setPortalState({ loading: false, snapshot, errors, lastLoadedAt: new Date() });
   };
+
+  useEffect(() => {
+    if (!roleCanSwitchEnvironment(role, portalState.snapshot) && environment !== 'sandbox') {
+      setEnvironment('sandbox');
+    }
+  }, [environment, portalState.snapshot, role]);
+
+  useEffect(() => {
+    if (docsRouteOpen) return;
+    const query = new URLSearchParams(window.location.search);
+    query.set('section', section);
+    query.set('env', environment);
+    if (roleCanManageServices(role)) {
+      query.set('admin', 'true');
+      query.set('role', role);
+    } else {
+      query.delete('admin');
+      query.delete('role');
+    }
+    const nextUrl = `${window.location.pathname}?${query.toString()}${window.location.hash}`;
+    window.history.replaceState({}, '', nextUrl);
+  }, [docsRouteOpen, environment, role, section]);
 
   useEffect(() => {
     void loadPortal();
@@ -289,7 +313,7 @@ export function App() {
           {roleCanManageServices(role) ? (
             <button className="primary-action" onClick={() => setModal('service')}>
               <Plus size={18} />
-              <span>New Integration</span>
+              <span>Provision Integration</span>
             </button>
           ) : role === 'public_developer' ? (
             <button className="primary-action" onClick={() => {
@@ -335,6 +359,8 @@ export function App() {
           )}
         </div>
       </main>
+
+      {portalState.loading && <GlobalLoadingOverlay message="Loading..." />}
 
       {modal && <PortalModal type={modal} config={config} onClose={() => setModal(null)} refresh={loadPortal} />}
       {authOpen && (
@@ -405,6 +431,20 @@ function roleCanSwitchEnvironment(role: PortalRole, snapshot?: PortalSnapshot) {
 
 function roleCanManageServices(role: PortalRole) {
   return role === 'operator' || role === 'admin';
+}
+
+function sectionFromQuery(query: URLSearchParams): SectionId {
+  const requested = query.get('section') || query.get('page');
+  return navItems.some((item) => item.id === requested) ? (requested as SectionId) : 'overview';
+}
+
+function GlobalLoadingOverlay({ message }: { message: string }) {
+  return (
+    <div className="global-loading-overlay" role="status" aria-live="polite">
+      <div className="loading-orb" />
+      <strong>{message}</strong>
+    </div>
+  );
 }
 
 function EnvironmentSwitch({
@@ -566,11 +606,14 @@ function SectionRenderer({
 }
 
 function AccessDenied({ role, section }: { role: PortalRole; section: SectionId }) {
+  const detail = roleCanManageServices(role)
+    ? `${roleMeta[role].label} cannot open ${titleFor[section]} with the current session permissions. Use an approved staff account with the required control scope.`
+    : `${roleMeta[role].label} cannot open ${titleFor[section]}. Sign in with an approved ORBI developer account to continue.`;
   return (
     <div className="panel wide-panel">
       <EmptyState
         title="This area needs the right account access"
-        detail={`${roleMeta[role].label} cannot open ${titleFor[section]}. Sign in with an approved ORBI developer account to continue.`}
+        detail={detail}
       />
     </div>
   );
@@ -626,10 +669,10 @@ function Overview({ role, state }: { role: PortalRole; state: PortalState }) {
       <div className="dashboard-grid">
         {isStaff ? (
           <>
-            <MetricCard label="Active integrations" value={String(activeServices.length)} tone="success" detail="Approved services ready for use" />
-            <MetricCard label="Pending reviews" value={String(pendingApplications.length)} tone="warning" detail="Applications waiting for review" />
-            <MetricCard label="Payment updates" value={String(failedWebhooks.length)} tone={failedWebhooks.length ? 'warning' : 'success'} detail="Updates that may need retry" />
-            <MetricCard label="Open incidents" value={String(activeIncidents.length)} tone={activeIncidents.length ? 'danger' : 'success'} detail={activeIncidents.length ? 'Operator action required' : 'No active incidents'} />
+            <MetricCard label="Approved services" value={String(activeServices.length)} tone="success" detail="Live or sandbox integrations under ORBI control" />
+            <MetricCard label="Access reviews" value={String(pendingApplications.length)} tone="warning" detail="Developer requests waiting for a decision" />
+            <MetricCard label="Webhook recovery" value={String(failedWebhooks.length)} tone={failedWebhooks.length ? 'warning' : 'success'} detail="Failed payment updates available for replay" />
+            <MetricCard label="Risk queue" value={String(activeIncidents.length)} tone={activeIncidents.length ? 'danger' : 'success'} detail={activeIncidents.length ? 'Incident response required' : 'No active incidents'} />
           </>
         ) : (
           <>
@@ -643,32 +686,64 @@ function Overview({ role, state }: { role: PortalRole; state: PortalState }) {
 
       <div className="panel split-panel">
         <div>
-          <p className="eyebrow">{role.includes('developer') ? 'Developer journey' : role === 'operator' ? 'Team console' : 'Admin view'}</p>
-          <h2>{role.includes('developer') ? 'Launch ORBI payments with confidence.' : 'Run BaaS access with auditable controls.'}</h2>
+          <p className="eyebrow">{role.includes('developer') ? 'Developer journey' : role === 'operator' ? 'Operations desk' : 'BaaS command center'}</p>
+          <h2>{role.includes('developer') ? 'Launch ORBI payments with confidence.' : 'Control developer access, credentials, webhooks, and risk from one place.'}</h2>
           <p>
             {role.includes('developer')
               ? 'Use ORBI SDKs, sandbox guides, hosted checkout, PaySafe escrow, and webhooks to build secure customer payments.'
-              : 'Your team can approve integrations, manage permissions, rotate keys, replay payment updates, and suspend risky accounts.'}
+              : 'This workspace is for ORBI staff. Use it to approve or reject integrations, issue production credentials, verify domains, rotate keys, replay payment updates, suspend services, and review audit evidence.'}
           </p>
         </div>
         <div className="readiness-mini">
-          <div><Check size={16} /><span>Integration onboarding</span></div>
-          <div><Check size={16} /><span>Approved access</span></div>
-          <div><Check size={16} /><span>Payment update replay</span></div>
-          <div><Check size={16} /><span>Sandbox/live separation</span></div>
+          {isStaff ? (
+            <>
+              <div><Check size={16} /><span>Approve or reject access</span></div>
+              <div><Check size={16} /><span>Issue and rotate credentials</span></div>
+              <div><Check size={16} /><span>Replay failed webhooks</span></div>
+              <div><Check size={16} /><span>Suspend risky services</span></div>
+            </>
+          ) : (
+            <>
+              <div><Check size={16} /><span>Integration onboarding</span></div>
+              <div><Check size={16} /><span>Approved access</span></div>
+              <div><Check size={16} /><span>Payment update replay</span></div>
+              <div><Check size={16} /><span>Sandbox/live separation</span></div>
+            </>
+          )}
         </div>
       </div>
 
       <div className="panel wide-panel policy-panel">
         <div>
-          <p className="eyebrow">What you can do</p>
+          <p className="eyebrow">{isStaff ? 'Operational authority' : 'What you can do'}</p>
           <h2>{roleMeta[role].label}</h2>
           <p>{roleMeta[role].policy}</p>
         </div>
         <StatusPill tone={roleCanManageServices(role) ? 'success' : role === 'developer' ? 'info' : 'warning'}>
-          {roleCanManageServices(role) ? 'Team controls' : role === 'developer' ? 'Sandbox builder' : 'Learn first'}
+          {roleCanManageServices(role) ? 'Staff controls' : role === 'developer' ? 'Sandbox builder' : 'Learn first'}
         </StatusPill>
       </div>
+
+      {isStaff && (
+        <div className="panel wide-panel">
+          <PanelHeader title="BaaS Control Actions" />
+          <div className="step-grid">
+            {[
+              'Review production access requests',
+              'Provision integrations and service scopes',
+              'Issue, rotate, or revoke API credentials',
+              'Verify domains before live access',
+              'Replay failed payment update webhooks',
+              'Investigate incidents and audit events',
+            ].map((step, index) => (
+              <div className="step-card" key={step}>
+                <span>{index + 1}</span>
+                <strong>{step}</strong>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <EndpointErrors errors={state.errors} role={role} />
       {isStaff ? (
@@ -2340,6 +2415,26 @@ function MfaEnrollmentModal({
     });
   };
 
+  const downloadRecoveryCodes = () => {
+    if (!recoveryCodes?.length) return;
+    const content = [
+      'ORBI Pay Developer Portal recovery codes',
+      'Save these one-time recovery codes now. ORBI will not show them again.',
+      '',
+      ...recoveryCodes,
+      '',
+      'Keep this file in a password manager or encrypted offline storage.',
+    ].join('\n');
+    const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'orbi-pay-recovery-codes.txt';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="modal-backdrop mfa-enrollment-backdrop" role="dialog" aria-modal="true" aria-labelledby="mfa-enrollment-title">
       <div className="modal-card mfa-enrollment-card">
@@ -2352,12 +2447,15 @@ function MfaEnrollmentModal({
           <div className="recovery-codes-panel">
             <div className="recovery-warning">
               <AlertTriangle size={18} />
-              <p>Save these one-time recovery codes now. ORBI will not show them again.</p>
+              <p>Save these one-time recovery codes now to enable download as txt file. ORBI will not show them again.</p>
             </div>
             <div className="recovery-code-grid">
               {recoveryCodes.map((recoveryCode) => <code key={recoveryCode}>{recoveryCode}</code>)}
             </div>
             <Copyable value={recoveryCodes.join('\n')} />
+            <button className="button-secondary full" onClick={downloadRecoveryCodes}>
+              Download recovery codes (.txt)
+            </button>
             <p className="security-note">Keep them in a password manager or encrypted offline storage. Never send them by email or chat.</p>
             <button className="button-primary full" onClick={() => onCompleted(verifiedSession)}>
               I saved my recovery codes
@@ -4115,6 +4213,21 @@ function AuthModal({
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <div className="modal-card auth-card">
+        {working && (
+          <div className="modal-loading-overlay" role="status" aria-live="polite">
+            <div className="loading-orb" />
+            <strong>
+              {mode === 'signin'
+                ? 'Signing in securely...'
+                : emailVerificationRequired
+                  ? 'Verifying your email...'
+                  : inviteToken
+                    ? 'Accepting invitation...'
+                    : 'Creating your sandbox account...'}
+            </strong>
+            <span>Please wait...</span>
+          </div>
+        )}
         <button className="icon-button modal-close" onClick={onClose} aria-label="Close login">
           <X size={20} />
         </button>

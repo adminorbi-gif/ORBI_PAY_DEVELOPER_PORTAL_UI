@@ -2288,6 +2288,45 @@ tr:last-child td {
   line-height: 1.6;
 }
 
+.global-loading-overlay {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 70;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 12px;
+  align-items: center;
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 16px 18px;
+  color: #e8fff7;
+  background: linear-gradient(135deg, rgba(7, 24, 21, 0.96), rgba(8, 95, 80, 0.94));
+  border: 1px solid rgba(167, 243, 208, 0.22);
+  border-radius: 22px;
+  box-shadow: 0 24px 70px rgba(2, 6, 23, 0.28);
+}
+
+.global-loading-overlay span {
+  grid-column: 2;
+  color: rgba(232, 255, 247, 0.74);
+  font-size: 12px;
+}
+
+.loading-orb {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(167, 243, 208, 0.25);
+  border-top-color: #a7f3d0;
+  border-radius: 999px;
+  animation: orbi-spin 780ms linear infinite;
+}
+
+@keyframes orbi-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .modal-backdrop,
 .sidebar-overlay {
   position: fixed;
@@ -2312,6 +2351,26 @@ tr:last-child td {
   border-radius: 34px;
   box-shadow: 0 40px 120px rgba(2, 6, 23, 0.28);
   overflow: hidden;
+}
+
+.modal-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  padding: 32px;
+  text-align: center;
+  color: #e8fff7;
+  background: rgba(7, 24, 21, 0.88);
+  backdrop-filter: blur(10px);
+}
+
+.modal-loading-overlay span {
+  color: rgba(232, 255, 247, 0.74);
+  font-size: 13px;
 }
 
 .auth-card {
