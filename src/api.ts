@@ -204,6 +204,34 @@ export type UsageMeteringSummary = Record<string, unknown> & {
   }>;
 };
 
+export type BillingPlanSummary = Record<string, unknown> & {
+  generatedAt?: string;
+  enforcementMode?: 'observe' | string;
+  planCatalog?: Array<{
+    planCode?: string;
+    displayName?: string;
+    dailyCallLimit?: number;
+    monthlyCallLimit?: number;
+    liveEnabled?: boolean;
+  }>;
+  assignments?: Array<{
+    serviceCode?: string;
+    planCode?: string;
+    status?: string;
+    dailyCallLimit?: number;
+    monthlyCallLimit?: number;
+    assignedAt?: string;
+    updatedAt?: string;
+  }>;
+  overLimitServices?: Array<{
+    serviceCode?: string;
+    planCode?: string;
+    requests24h?: number;
+    dailyCallLimit?: number;
+    severity?: string;
+  }>;
+};
+
 export type SandboxAccount = Record<string, unknown> & {
   id?: string;
   name?: string;
@@ -234,6 +262,7 @@ export type PortalSnapshot = {
   incidents?: OperatorIncident[];
   securitySummary?: PortalSecuritySummary;
   usageMetering?: UsageMeteringSummary;
+  billingPlanSummary?: BillingPlanSummary;
 };
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');

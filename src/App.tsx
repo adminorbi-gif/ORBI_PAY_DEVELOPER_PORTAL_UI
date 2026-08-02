@@ -1463,6 +1463,7 @@ function ObservabilityPanel({ snapshot }: { snapshot?: PortalSnapshot }) {
 function UsageMeteringReadiness({ snapshot }: { snapshot?: PortalSnapshot }) {
   const security = snapshot?.securitySummary;
   const metering = snapshot?.usageMetering;
+  const billing = snapshot?.billingPlanSummary;
   const events = snapshot?.events || [];
   const services = snapshot?.services || [];
   const webhooks = snapshot?.webhookDeliveries || [];
@@ -1483,6 +1484,9 @@ function UsageMeteringReadiness({ snapshot }: { snapshot?: PortalSnapshot }) {
   const billingReady = Boolean(totalRequests || updateDeliveries || activeServices);
   const topServices = metering?.byService || [];
   const topRoutes = metering?.byRoute || [];
+  const planCatalog = billing?.planCatalog || [];
+  const planAssignments = billing?.assignments || [];
+  const overLimitServices = billing?.overLimitServices || [];
 
   return (
     <div className="panel wide-panel metering-panel">
@@ -1525,6 +1529,38 @@ function UsageMeteringReadiness({ snapshot }: { snapshot?: PortalSnapshot }) {
           )}
         </div>
       )}
+      <div className="observability-body">
+        <div className="impact-list">
+          <strong>Plan controls</strong>
+          <div className="impact-row">
+            <span>Mode</span>
+            <b>{String(billing?.enforcementMode || 'observe')}</b>
+          </div>
+          <div className="impact-row">
+            <span>Plans</span>
+            <b>{String(planCatalog.length)}</b>
+          </div>
+          <div className="impact-row">
+            <span>Assigned integrations</span>
+            <b>{String(planAssignments.length)}</b>
+          </div>
+        </div>
+        <div className="impact-list">
+          <strong>Limit watch</strong>
+          {overLimitServices.length === 0 && (
+            <div className="impact-row">
+              <span>No integrations near plan limit</span>
+              <b>Clear</b>
+            </div>
+          )}
+          {overLimitServices.slice(0, 5).map((item) => (
+            <div className="impact-row" key={String(item.serviceCode || 'unknown')}>
+              <span>{String(item.serviceCode || 'unknown')} · {String(item.planCode || 'plan')}</span>
+              <b>{Number(item.requests24h || 0)}/{Number(item.dailyCallLimit || 0)}</b>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
