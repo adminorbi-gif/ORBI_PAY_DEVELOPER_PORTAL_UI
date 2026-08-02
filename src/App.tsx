@@ -3392,8 +3392,7 @@ function DocsStandaloneShell({
         <nav className="docs-page-links" aria-label="Documentation navigation">
           <a href="/docs">Guides</a>
           <a href="/?section=runtime">SDKs</a>
-          <a href="/?section=sandbox">Sandbox</a>
-          <a href="/?section=access">Get access</a>
+          <a href="/?section=access">Developer access</a>
         </nav>
         <button className="button-primary" onClick={onCreateAccount}>
           Create account
@@ -3422,10 +3421,10 @@ function Docs({ state, config, routeDocId, standalone = false }: { state: Portal
       <section className="docs-hero">
         <div>
           <p className="eyebrow">ORBI Pay Developer Docs</p>
-          <h2>Build, test, and launch trusted payment experiences.</h2>
+          <h2>Build with ORBI Pay using official integration guides.</h2>
           <p>
             Follow the official SDK-first guides for payment profiles, hosted challenges, PaySafe escrow,
-            webhooks, sandbox testing, and production readiness.
+            webhooks, integration testing, and production readiness.
           </p>
         </div>
         <div className="docs-hero-actions">
