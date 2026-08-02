@@ -1707,19 +1707,20 @@ tr:last-child td {
   display: grid;
   gap: 20px;
   width: min(100%, 1480px);
+  min-height: 0;
 }
 
 .docs-page-shell {
-  min-height: 100dvh;
+  height: 100dvh;
   color: var(--text);
   background:
     radial-gradient(circle at 15% 0%, rgba(16, 185, 129, 0.12), transparent 30%),
     linear-gradient(180deg, #f7fbf9 0%, #eef5f1 100%);
+  overflow: hidden;
 }
 
 .docs-page-header {
-  position: sticky;
-  top: 0;
+  position: relative;
   z-index: 20;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1786,12 +1787,14 @@ tr:last-child td {
 .docs-page-content {
   display: grid;
   justify-items: center;
-  min-height: calc(100dvh - 130px);
-  padding: clamp(18px, 3vw, 42px);
+  height: calc(100dvh - 76px);
+  min-height: 0;
+  padding: clamp(14px, 2vw, 24px);
+  overflow: hidden;
 }
 
 .docs-page-footer {
-  display: flex;
+  display: none;
   justify-content: space-between;
   gap: 16px;
   padding: 22px clamp(18px, 4vw, 54px);
@@ -1803,6 +1806,11 @@ tr:last-child td {
 
 .docs-portal.standalone {
   width: min(100%, 1680px);
+  height: 100%;
+}
+
+.docs-portal.standalone .docs-hero {
+  display: none;
 }
 
 .docs-hero {
@@ -1848,18 +1856,20 @@ tr:last-child td {
   grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) minmax(250px, 310px);
   align-items: start;
   gap: clamp(20px, 3vw, 36px);
+  min-height: 0;
+  height: 100%;
 }
 
 .docs-sidebar,
 .docs-context {
-  position: sticky;
-  top: 86px;
+  position: static;
   display: grid;
   gap: 12px;
 }
 
 .docs-sidebar {
-  max-height: calc(100dvh - 112px);
+  height: 100%;
+  max-height: none;
   padding: 16px;
   border: 1px solid var(--line);
   border-radius: 24px;
@@ -1869,7 +1879,8 @@ tr:last-child td {
 }
 
 .docs-context {
-  max-height: calc(100dvh - 112px);
+  height: 100%;
+  max-height: none;
   padding: 16px;
   border-left: 1px solid rgba(12, 104, 89, 0.12);
   overflow-y: auto;
@@ -1945,10 +1956,15 @@ tr:last-child td {
 
 .docs-main {
   min-width: 0;
+  height: 100%;
+  min-height: 0;
+  padding-right: 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .docs-main .doc-reader {
-  min-height: calc(100dvh - 260px);
+  min-height: 100%;
   padding: clamp(28px, 4vw, 56px);
   border: 1px solid rgba(12, 104, 89, 0.1);
   border-radius: 34px;
@@ -3192,6 +3208,27 @@ textarea {
   .docs-page-header {
     grid-template-columns: 1fr;
     position: static;
+  }
+
+  .docs-page-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+
+  .docs-page-content,
+  .docs-portal.standalone,
+  .docs-workspace,
+  .docs-sidebar,
+  .docs-context,
+  .docs-main {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .docs-portal.standalone .docs-hero {
+    display: grid;
   }
 
   .docs-page-links {
