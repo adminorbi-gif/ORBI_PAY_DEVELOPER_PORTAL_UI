@@ -1709,6 +1709,102 @@ tr:last-child td {
   width: min(100%, 1480px);
 }
 
+.docs-page-shell {
+  min-height: 100dvh;
+  color: var(--text);
+  background:
+    radial-gradient(circle at 15% 0%, rgba(16, 185, 129, 0.12), transparent 30%),
+    linear-gradient(180deg, #f7fbf9 0%, #eef5f1 100%);
+}
+
+.docs-page-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  min-height: 76px;
+  padding: 14px clamp(18px, 4vw, 54px);
+  border-bottom: 1px solid rgba(12, 104, 89, 0.12);
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(14px);
+}
+
+.docs-page-brand,
+.docs-page-links {
+  display: flex;
+  align-items: center;
+}
+
+.docs-page-brand {
+  gap: 12px;
+  min-width: 0;
+  color: inherit;
+}
+
+.docs-page-brand strong,
+.docs-page-brand span {
+  display: block;
+}
+
+.docs-page-brand strong {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.docs-page-brand span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.docs-page-links {
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.docs-page-links a {
+  padding: 10px 13px;
+  color: #35534c;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.docs-page-links a:hover {
+  color: #075e52;
+  background: #edf8f4;
+}
+
+.docs-page-content {
+  display: grid;
+  justify-items: center;
+  min-height: calc(100dvh - 130px);
+  padding: clamp(18px, 3vw, 42px);
+}
+
+.docs-page-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px clamp(18px, 4vw, 54px);
+  color: #55726a;
+  border-top: 1px solid rgba(12, 104, 89, 0.12);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.docs-portal.standalone {
+  width: min(100%, 1680px);
+}
+
 .docs-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -1749,9 +1845,9 @@ tr:last-child td {
 
 .docs-workspace {
   display: grid;
-  grid-template-columns: minmax(230px, 280px) minmax(0, 1fr) minmax(250px, 320px);
+  grid-template-columns: minmax(250px, 300px) minmax(0, 1fr) minmax(250px, 310px);
   align-items: start;
-  gap: 18px;
+  gap: clamp(20px, 3vw, 36px);
 }
 
 .docs-sidebar,
@@ -1844,43 +1940,61 @@ tr:last-child td {
 }
 
 .docs-main .doc-reader {
-  padding: clamp(24px, 4vw, 42px);
-  border: 1px solid rgba(220, 232, 227, 0.95);
-  border-radius: 30px;
-  background: #ffffff;
-  box-shadow: var(--shadow);
+  min-height: calc(100dvh - 260px);
+  padding: clamp(28px, 4vw, 56px);
+  border: 1px solid rgba(12, 104, 89, 0.1);
+  border-radius: 34px;
+  background:
+    linear-gradient(90deg, rgba(8, 127, 104, 0.045), transparent 14%),
+    #ffffff;
+  box-shadow: 0 24px 80px rgba(8, 94, 78, 0.1);
 }
 
 .docs-main .doc-section {
-  padding: clamp(18px, 2.6vw, 28px);
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.98));
+  padding: clamp(24px, 3vw, 38px) 0;
+  border: 0;
+  border-top: 1px solid rgba(12, 104, 89, 0.12);
+  border-radius: 0;
+  background: transparent;
 }
 
 .docs-main .doc-section h3 {
+  max-width: 780px;
   font-size: clamp(19px, 2vw, 25px);
   letter-spacing: -0.025em;
 }
 
-.docs-context-card {
-  min-width: 0;
-  padding: 17px;
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 14px 38px rgba(8, 94, 78, 0.08);
+.docs-main .doc-section p {
+  max-width: 820px;
+  color: #405b54;
+  font-size: 16px;
 }
 
-.docs-context-card h3 {
+.docs-main .doc-section pre {
+  max-width: 980px;
+}
+
+.docs-context-note {
+  min-width: 0;
+  padding: 0 0 18px;
+  border-bottom: 1px solid rgba(12, 104, 89, 0.14);
+}
+
+.docs-context-note h3 {
   margin: 10px 0 8px;
   font-size: 17px;
 }
 
-.docs-context-card p {
+.docs-context-note p {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
+}
+
+.docs-context-note.code-panel pre {
+  padding: 14px;
+  border-radius: 16px;
+  font-size: 12px;
 }
 
 .docs-sdk-list {
@@ -3030,9 +3144,28 @@ textarea {
   }
 
   .docs-main .doc-reader,
-  .docs-sidebar,
-  .docs-context-card {
+  .docs-sidebar {
     border-radius: 22px;
+  }
+
+  .docs-page-header {
+    grid-template-columns: 1fr;
+    position: static;
+  }
+
+  .docs-page-links {
+    justify-content: flex-start;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .docs-page-header .button-primary {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .docs-page-footer {
+    display: grid;
   }
 
   .doc-reader-head {

@@ -181,6 +181,32 @@ export function App() {
     setSection('overview');
   };
 
+  if (docsRouteOpen) {
+    return (
+      <DocsStandaloneShell
+        state={portalState}
+        config={config}
+        routeDocId={docRouteId}
+        onCreateAccount={() => {
+          setAuthMode('signup');
+          setAuthOpen(true);
+        }}
+        authModal={authOpen ? (
+          <AuthModal
+            config={config}
+            initialMode={authMode}
+            onClose={() => setAuthOpen(false)}
+            onSignedIn={(nextSession) => {
+              setSession(nextSession);
+              setAuthOpen(false);
+              setSection(roleCanManageServices(nextSession.user.role) ? 'overview' : 'sandbox');
+            }}
+          />
+        ) : null}
+      />
+    );
+  }
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
@@ -201,6 +227,20 @@ export function App() {
         <nav className="nav-list">
           {navItems.filter((item) => isSectionVisibleForRole(item.id, role)).map((item) => {
             const Icon = item.icon;
+            if (item.id === 'docs') {
+              return (
+                <a
+                  className={`nav-item ${section === item.id ? 'active' : ''}`}
+                  href={`${portalPublicOrigin()}/docs`}
+                  key={item.id}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Icon size={18} />
+                  <span>{item.label}</span>
+                </a>
+              );
+            }
             return (
               <button
                 className={`nav-item ${section === item.id ? 'active' : ''}`}
@@ -2420,13 +2460,58 @@ function IncidentCard({ config, incident, refresh }: { config: PortalConfig; inc
   );
 }
 
-function Docs({ state, config, routeDocId }: { state: PortalState; config: PortalConfig; routeDocId?: string }) {
+function DocsStandaloneShell({
+  state,
+  config,
+  routeDocId,
+  onCreateAccount,
+  authModal,
+}: {
+  state: PortalState;
+  config: PortalConfig;
+  routeDocId?: string;
+  onCreateAccount: () => void;
+  authModal: ReactNode;
+}) {
+  return (
+    <div className="docs-page-shell">
+      <header className="docs-page-header">
+        <a className="docs-page-brand" href="/">
+          <div className="orbi-mark">O</div>
+          <div>
+            <strong>ORBI Pay Docs</strong>
+            <span>Developer documentation</span>
+          </div>
+        </a>
+        <nav className="docs-page-links" aria-label="Documentation navigation">
+          <a href="/docs">Guides</a>
+          <a href="/?section=runtime">SDKs</a>
+          <a href="/?section=sandbox">Sandbox</a>
+          <a href="/?section=access">Get access</a>
+        </nav>
+        <button className="button-primary" onClick={onCreateAccount}>
+          Create account
+        </button>
+      </header>
+      <main className="docs-page-content">
+        <Docs state={state} config={config} routeDocId={routeDocId} standalone />
+      </main>
+      <footer className="docs-page-footer">
+        <span>ORBI Pay Developer Documentation</span>
+        <span>Use official SDKs, signed webhooks, and approved production credentials.</span>
+      </footer>
+      {authModal}
+    </div>
+  );
+}
+
+function Docs({ state, config, routeDocId, standalone = false }: { state: PortalState; config: PortalConfig; routeDocId?: string; standalone?: boolean }) {
   const docs = state.snapshot?.docs || [];
   const sdks = state.snapshot?.sdks || [];
   const selectedDoc = (routeDocId ? docs.find((doc) => String(doc.id || '') === routeDocId) : docs[0]) || undefined;
   const docsHomeHref = `${portalPublicOrigin()}/docs`;
   return (
-    <div className="docs-portal">
+    <div className={`docs-portal ${standalone ? 'standalone' : ''}`}>
       <section className="docs-hero">
         <div>
           <p className="eyebrow">ORBI Pay Developer Docs</p>
@@ -2472,19 +2557,19 @@ function Docs({ state, config, routeDocId }: { state: PortalState; config: Porta
         </main>
 
         <aside className="docs-context">
-          <div className="docs-context-card">
+          <div className="docs-context-note">
             <StatusPill tone="success">SDK first</StatusPill>
             <h3>Use official SDKs</h3>
             <p>Build with `orbi.transfers.send`, hosted payment intents, and verified webhook handlers instead of raw HTTP where possible.</p>
             <a className="ghost-action" href="/?section=runtime">Open SDK setup</a>
           </div>
 
-          <div className="docs-context-card">
+          <div className="docs-context-note">
             <h3>Terms of use</h3>
             <p>Keep secret keys server-side, verify every webhook signature, use idempotency keys, and never expose customer financial data without consent.</p>
           </div>
 
-          <div className="docs-context-card">
+          <div className="docs-context-note">
             <h3>SDK catalog</h3>
             <div className="docs-sdk-list">
               {sdks.length ? sdks.slice(0, 6).map((sdk, index) => (
@@ -2496,7 +2581,7 @@ function Docs({ state, config, routeDocId }: { state: PortalState; config: Porta
             </div>
           </div>
 
-          <div className="docs-context-card code-panel">
+          <div className="docs-context-note code-panel">
             <h3>Quick example</h3>
             <pre>{`const orbi = createOrbi({
   baseUrl: process.env.ORBI_PAY_GATEWAY_BASE_URL!,
