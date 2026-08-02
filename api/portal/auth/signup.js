@@ -14,6 +14,7 @@ export default async function handler(req, res) {
     signup: '/v1/portal/auth/signup',
     verify_email: '/v1/portal/auth/email/verify',
     resend_email: '/v1/portal/auth/email/resend',
+    accept_invite: '/v1/portal/auth/invitations/accept',
   };
   if (!paths[action]) return json(res, 400, { error: 'Unsupported account action.' });
   const { action: _action, ...payload } = body;

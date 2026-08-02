@@ -30,6 +30,20 @@ export type PortalUser = {
   updatedAt?: string;
 };
 
+export type PortalTeamInvitation = Record<string, unknown> & {
+  invitationId?: string;
+  email?: string;
+  name?: string;
+  role?: 'developer' | 'operator' | 'admin' | string;
+  serviceCodes?: string[];
+  liveAccess?: boolean;
+  status?: 'pending' | 'accepted' | 'revoked' | 'expired' | string;
+  deliveryStatus?: string;
+  invitedBy?: string;
+  expiresAt?: string;
+  createdAt?: string;
+};
+
 export type PortalSession = {
   token: string;
   user: PortalUser;
@@ -164,6 +178,7 @@ export type PortalSnapshot = {
   integrationHealth?: unknown;
   serviceProfile?: Record<string, unknown>;
   portalUsers?: PortalUser[];
+  portalTeamInvitations?: PortalTeamInvitation[];
   portalAudit?: Array<Record<string, unknown>>;
   incidents?: OperatorIncident[];
 };

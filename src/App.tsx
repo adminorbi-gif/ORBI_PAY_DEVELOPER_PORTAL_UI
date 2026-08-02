@@ -37,6 +37,7 @@ import {
   type MfaEnrollmentSetup,
   type PortalUser,
   type PortalSnapshot,
+  type PortalTeamInvitation,
   type OperatorIncident,
   type SandboxAccount,
   type ServiceApplication,
@@ -118,7 +119,7 @@ export function App() {
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [modal, setModal] = useState<'service' | 'key' | null>(null);
-  const [authOpen, setAuthOpen] = useState(false);
+  const [authOpen, setAuthOpen] = useState(() => Boolean(new URLSearchParams(window.location.search).get('invite_token')));
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin');
   const [mfaStepUpOpen, setMfaStepUpOpen] = useState(false);
   const [portalState, setPortalState] = useState<PortalState>({ loading: true, errors: [] });
@@ -1909,12 +1910,14 @@ function KeysAndSecrets({
 
 function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: PortalState; refresh: () => void }) {
   const users = state.snapshot?.portalUsers || [];
+  const invitations = state.snapshot?.portalTeamInvitations || [];
   const audit = state.snapshot?.portalAudit || [];
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState<'developer' | 'operator' | 'admin'>('developer');
   const [password, setPassword] = useState('');
   const [serviceCodes, setServiceCodes] = useState('');
+  const [inviteResult, setInviteResult] = useState<Record<string, unknown>>();
   const [mfaRequired, setMfaRequired] = useState(true);
   const [liveAccess, setLiveAccess] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -1940,6 +1943,84 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
       setMessage(`MFA status: ${String(body?.data?.status || 'not configured')}.`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to load authenticator setup.');
+    }
+  };
+
+  const inviteUser = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    setInviteResult(undefined);
+    try {
+      const url = new URL(`${config.bffBaseUrl}/team-invitations`, window.location.origin);
+      url.searchParams.set('environment', config.environment);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
+          'x-orbi-portal-confirmation': 'true',
+          'x-orbi-portal-reason': `Invite ${email} to Developer Portal team access.`,
+        },
+        body: JSON.stringify({
+          email,
+          name,
+          role,
+          mfaRequired,
+          liveAccess,
+          serviceCodes: serviceCodes.split(',').map((item) => item.trim()).filter(Boolean),
+          inviteUrl: `${portalPublicOrigin()}/?invite_token={token}`,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      const data = body?.data || body;
+      setMessage(response.ok ? 'Invitation created. The staff member should accept it and set their own password.' : String(body?.error || `Invite failed with HTTP ${response.status}`));
+      if (response.ok) {
+        setInviteResult(data);
+        setEmail('');
+        setName('');
+        setPassword('');
+        setServiceCodes('');
+        refresh();
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to invite portal staff.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const revokeInvite = async (invite: PortalTeamInvitation) => {
+    const invitationId = String(invite.invitationId || '');
+    if (!invitationId) return;
+    const reason = window.prompt(`Why are you revoking the invitation for ${invite.email}?`);
+    if (!reason?.trim() || reason.trim().length < 10) {
+      setMessage('Add a clear reason with at least 10 characters.');
+      return;
+    }
+    setWorking(true);
+    setMessage(undefined);
+    try {
+      const url = new URL(`${config.bffBaseUrl}/team-invitations/${encodeURIComponent(invitationId)}/revoke`, window.location.origin);
+      url.searchParams.set('environment', config.environment);
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
+          'x-orbi-portal-confirmation': 'true',
+          'x-orbi-portal-reason': reason.trim(),
+        },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      const body = await response.json().catch(() => null);
+      setMessage(response.ok ? 'Invitation revoked.' : String(body?.error || `Revoke failed with HTTP ${response.status}`));
+      if (response.ok) refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to revoke invitation.');
+    } finally {
+      setWorking(false);
     }
   };
 
@@ -2078,7 +2159,7 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
       <div className="panel wide-panel">
         <PanelHeader title="Portal Team Access" />
         <p className="security-note">
-          Create controlled developer, operator, and admin access. Store passwords securely and enable MFA for production users.
+          Invite each staff member with their own login, role, integration codes, MFA, and audit trail. Do not share passwords across a team.
         </p>
         <div className="form-grid">
           <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Jane Operator" /></label>
@@ -2101,11 +2182,50 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
           <label><input type="checkbox" checked={mfaRequired} onChange={(event) => setMfaRequired(event.target.checked)} /> Require MFA</label>
           <label><input type="checkbox" checked={liveAccess} onChange={(event) => setLiveAccess(event.target.checked)} /> Live access</label>
         </div>
-        <button className="button-primary inline-link" disabled={working || !email || !password || !name} onClick={createUser}>
-          {working ? 'Creating' : 'Create account'}
+        <div className="row-actions">
+        <button className="button-primary inline-link" disabled={working || !email || !name || (role === 'developer' && !serviceCodes.trim())} onClick={inviteUser}>
+          {working ? 'Inviting' : 'Invite staff'}
+        </button>
+        <button className="ghost-action inline-link" disabled={working || !email || !password || !name} onClick={createUser}>
+          Create account directly
         </button>
         <button className="ghost-action inline-link" onClick={loadOwnMfa}>Check my MFA status</button>
+        </div>
         {message && <div className="inline-message">{message}</div>}
+        {inviteResult && (
+          <SecretCodePanel
+            compact
+            title="Invitation link"
+            subtitle="Send only through an approved secure channel if email delivery did not reach the staff member."
+            metadata={[
+              { label: 'Delivery', value: inviteResult.deliveryStatus || 'created' },
+              { label: 'Expires', value: objectValue(inviteResult.invitation).expiresAt },
+            ]}
+            rows={[{ label: 'ORBI_PORTAL_INVITE_URL', value: inviteResult.inviteUrl }]}
+          />
+        )}
+      </div>
+
+      <div className="panel wide-panel">
+        <PanelHeader title="Pending Team Invitations" />
+        <DataTable
+          columns={['Email', 'Role', 'Integrations', 'Status', 'Expires', 'Action']}
+          rows={invitations.map((invite) => [
+            String(invite.email || '-'),
+            <StatusPill tone={invite.role === 'admin' ? 'danger' : invite.role === 'operator' ? 'warning' : 'info'}>{String(invite.role || 'developer')}</StatusPill>,
+            arrayValue(invite, 'serviceCodes', 'service_codes').join(', ') || '-',
+            <StatusPill tone={toneFromStatus(invite.status)}>{String(invite.status || 'pending')}</StatusPill>,
+            invite.expiresAt ? new Date(String(invite.expiresAt)).toLocaleString() : '-',
+            <button
+              className="mini-link danger-link"
+              disabled={working || String(invite.status || '') !== 'pending'}
+              onClick={() => revokeInvite(invite)}
+            >
+              Revoke
+            </button>,
+          ])}
+          empty="No team invitations yet."
+        />
       </div>
 
       <div className="panel wide-panel">
@@ -3840,7 +3960,9 @@ function AuthModal({
   onClose: () => void;
   onSignedIn: (session: PortalSession) => void;
 }) {
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
+  const initialInviteToken = new URLSearchParams(window.location.search).get('invite_token') || '';
+  const [mode, setMode] = useState<'signin' | 'signup'>(initialInviteToken ? 'signup' : initialMode);
+  const [inviteToken, setInviteToken] = useState(initialInviteToken);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [otp, setOtp] = useState('');
@@ -3860,10 +3982,44 @@ function AuthModal({
 
   const switchMode = (nextMode: 'signin' | 'signup') => {
     setMode(nextMode);
+    if (nextMode === 'signin') setInviteToken('');
     setSignupStep(1);
     setEmailVerificationRequired(false);
     setEmailVerificationCode('');
     setMessage(undefined);
+  };
+
+  const acceptInvite = async () => {
+    setWorking(true);
+    setMessage(undefined);
+    try {
+      const response = await fetch(`${config.bffBaseUrl}/auth/signup`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'accept_invite',
+          token: inviteToken,
+          username,
+          password,
+          environment: config.environment,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      const data = body?.data || body;
+      setWorking(false);
+      if (!response.ok || body?.success === false) {
+        setMessage(String(body?.error || `Invitation failed with HTTP ${response.status}`));
+        return;
+      }
+      setMessage(String(data?.nextStep || 'Invitation accepted. Sign in with your new staff account.'));
+      setInviteToken('');
+      setMode('signin');
+      setSignupStep(1);
+      window.history.replaceState({}, '', window.location.pathname);
+    } catch (error) {
+      setWorking(false);
+      setMessage(error instanceof Error ? error.message : 'Unable to accept invitation.');
+    }
   };
 
   const signupStepIsValid =
@@ -3963,15 +4119,17 @@ function AuthModal({
           <X size={20} />
         </button>
         <p className="eyebrow">ORBI Developer Access</p>
-        <h2>{emailVerificationRequired ? 'Verify your email' : mode === 'signup' ? 'Create your developer account' : 'Sign in to ORBI Pay'}</h2>
+        <h2>{inviteToken ? 'Accept team invitation' : emailVerificationRequired ? 'Verify your email' : mode === 'signup' ? 'Create your developer account' : 'Sign in to ORBI Pay'}</h2>
         <p className="modal-copy">
-          {emailVerificationRequired
+          {inviteToken
+            ? 'Create your own staff login. Your role and integration access are controlled by the invitation.'
+            : emailVerificationRequired
             ? `Enter the 6-digit code sent to ${email}. The code expires in 15 minutes.`
             : mode === 'signup'
             ? 'Start in sandbox, test real ORBI payment flows safely, then request production access when your business is ready.'
             : 'Use your developer, operator, or admin account to continue your ORBI integration work.'}
         </p>
-        {!emailVerificationRequired && <div className="auth-tabs">
+        {!emailVerificationRequired && !inviteToken && <div className="auth-tabs">
           <button className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}>Create account</button>
           <button className={mode === 'signin' ? 'active' : ''} onClick={() => switchMode('signin')}>Sign in</button>
         </div>}
@@ -3997,7 +4155,7 @@ function AuthModal({
                 Resend verification code
               </button>
             </div>
-          ) : mode === 'signup' && (
+          ) : !inviteToken && mode === 'signup' && (
             <div className="signup-progress" aria-label={`Signup step ${signupStep} of 3`}>
               <div className="signup-progress-copy">
                 <span>Step {signupStep} of 3</span>
@@ -4009,7 +4167,32 @@ function AuthModal({
             </div>
           )}
 
-          {!emailVerificationRequired && mode === 'signup' && signupStep === 1 && (
+          {!emailVerificationRequired && inviteToken && (
+            <div className="auth-step">
+              <label>
+                Staff username
+                <input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32))}
+                  placeholder="jane_it"
+                  autoComplete="username"
+                />
+              </label>
+              <label>
+                New password
+                <PasswordField
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="At least 12 characters"
+                  autoComplete="new-password"
+                  hideLabel
+                />
+              </label>
+              <p className="signup-review-note">Do not use a shared team password. Every ORBI portal staff member must use their own login.</p>
+            </div>
+          )}
+
+          {!emailVerificationRequired && !inviteToken && mode === 'signup' && signupStep === 1 && (
             <div className="auth-step">
               <label>
                 Full name
@@ -4041,7 +4224,7 @@ function AuthModal({
             </div>
           )}
 
-          {!emailVerificationRequired && mode === 'signup' && signupStep === 2 && (
+          {!emailVerificationRequired && !inviteToken && mode === 'signup' && signupStep === 2 && (
             <div className="auth-step">
               <label>
                 Business or project
@@ -4063,7 +4246,7 @@ function AuthModal({
             </div>
           )}
 
-          {!emailVerificationRequired && mode === 'signup' && signupStep === 3 && (
+          {!emailVerificationRequired && !inviteToken && mode === 'signup' && signupStep === 3 && (
             <div className="auth-step">
               <div className="signup-review">
                 <div><span>Developer</span><strong>{name}</strong><small>@{username}</small></div>
@@ -4078,7 +4261,7 @@ function AuthModal({
             </div>
           )}
 
-          {!emailVerificationRequired && mode === 'signin' && (
+          {!emailVerificationRequired && !inviteToken && mode === 'signin' && (
             <div className="auth-step">
               <label>
                 Email
@@ -4142,6 +4325,10 @@ function AuthModal({
               {working ? 'Verifying' : 'Verify email'}
             </button>
           </div>
+        ) : inviteToken ? (
+          <button className="button-primary full" onClick={acceptInvite} disabled={working || !username.trim() || password.length < 12}>
+            {working ? 'Accepting invite' : 'Accept invitation'}
+          </button>
         ) : mode === 'signup' ? (
           <div className="auth-actions">
             {signupStep > 1 && (
