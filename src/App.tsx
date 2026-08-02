@@ -967,6 +967,14 @@ function OperationsOverview({ snapshot }: { snapshot?: PortalSnapshot }) {
   const failedServices = services.filter((service) => ['failed', 'suspended', 'revoked'].includes(String(service.status || '').toLowerCase()));
   const failedWebhooks = webhooks.filter((delivery) => String(delivery.status || '').toLowerCase() === 'failed');
   const failedMessages = messages.filter((delivery) => String(delivery.status || '').toLowerCase() === 'failed');
+  const servicesMissingKeys = services.filter((service) =>
+    !String(valueOf(service, 'keyStatus', 'key_status') || '').toLowerCase().includes('active')
+    || !String(valueOf(service, 'webhookSecretStatus', 'webhook_secret_status') || '').toLowerCase().includes('active'),
+  );
+  const liveServicesNeedingDomains = services.filter((service) =>
+    arrayValue(service, 'environments').includes('live')
+    && arrayValue(service, 'domainVerificationStatus', 'domain_verification_status', 'verifiedDomains', 'verified_domains').length === 0,
+  );
   const abnormalHealth = healthRows.filter((row) => arrayValue(row, 'warnings').length > 0 || String(row.status || '').toLowerCase() === 'attention');
   const warnings = [
     ...abnormalHealth.flatMap((row) => arrayValue(row, 'warnings').map((warning) => ({
@@ -994,6 +1002,41 @@ function OperationsOverview({ snapshot }: { snapshot?: PortalSnapshot }) {
         <MetricCard label="Warnings" value={String(warnings.length)} tone={warnings.length ? 'warning' : 'success'} detail="Operational warnings and abnormal integration checks" />
         <MetricCard label="Failed integrations" value={String(failedServices.length)} tone={failedServices.length ? 'danger' : 'success'} detail="Suspended, revoked, or failed services" />
         <MetricCard label="Failed deliveries" value={String(failedWebhooks.length + failedMessages.length)} tone={(failedWebhooks.length + failedMessages.length) ? 'danger' : 'success'} detail="Webhook and message deliveries needing recovery" />
+      </div>
+
+      <div className="governance-strip">
+        {[
+          {
+            label: 'Access review',
+            value: `${pendingRequests.length} waiting`,
+            detail: pendingRequests.length ? 'Approve, reject, or ask for more information.' : 'No developer access request is waiting.',
+            tone: pendingRequests.length ? 'warning' as StatusTone : 'success' as StatusTone,
+          },
+          {
+            label: 'Credential readiness',
+            value: `${servicesMissingKeys.length} need action`,
+            detail: servicesMissingKeys.length ? 'Issue or rotate API/payment update keys before launch.' : 'Approved integrations have usable credentials.',
+            tone: servicesMissingKeys.length ? 'warning' as StatusTone : 'success' as StatusTone,
+          },
+          {
+            label: 'Domain trust',
+            value: `${liveServicesNeedingDomains.length} unverified`,
+            detail: liveServicesNeedingDomains.length ? 'Verify live websites and callback URLs before production use.' : 'Live domains are verified.',
+            tone: liveServicesNeedingDomains.length ? 'warning' as StatusTone : 'success' as StatusTone,
+          },
+          {
+            label: 'Recovery queue',
+            value: `${failedWebhooks.length + failedMessages.length} failed`,
+            detail: failedWebhooks.length + failedMessages.length ? 'Replay or investigate failed webhooks/messages.' : 'No failed delivery needs action.',
+            tone: failedWebhooks.length + failedMessages.length ? 'danger' as StatusTone : 'success' as StatusTone,
+          },
+        ].map((item) => (
+          <div className={`governance-card ${item.tone}`} key={item.label}>
+            <StatusPill tone={item.tone}>{item.label}</StatusPill>
+            <strong>{item.value}</strong>
+            <span>{item.detail}</span>
+          </div>
+        ))}
       </div>
 
       <div className="ops-grid">
@@ -2179,6 +2222,9 @@ function KeysAndSecrets({
 }) {
   const services = state.snapshot?.services || [];
   const canCreateKeys = roleCanManageServices(role);
+  const keyReady = services.filter((service) => String(valueOf(service, 'keyStatus', 'key_status') || '').toLowerCase().includes('active')).length;
+  const updateKeyReady = services.filter((service) => String(valueOf(service, 'webhookSecretStatus', 'webhook_secret_status') || '').toLowerCase().includes('active')).length;
+  const liveReady = services.filter((service) => arrayValue(service, 'environments').includes('live')).length;
 
   return (
     <div className="stack">
@@ -2196,6 +2242,11 @@ function KeysAndSecrets({
           <div><strong>One-time reveal</strong><span>Copy new secrets immediately after issue or rotation.</span></div>
           <div><strong>Audited rotation</strong><span>Every key action requires a reason and is logged.</span></div>
         </div>
+      </div>
+      <div className="credential-readiness-grid">
+        <MetricCard label="API keys ready" value={`${keyReady}/${services.length || 0}`} tone={keyReady === services.length && services.length ? 'success' : 'warning'} detail="Integrations with an active server key" />
+        <MetricCard label="Update keys ready" value={`${updateKeyReady}/${services.length || 0}`} tone={updateKeyReady === services.length && services.length ? 'success' : 'warning'} detail="Integrations with signed webhook updates" />
+        <MetricCard label="Production enabled" value={String(liveReady)} tone={liveReady ? 'success' : 'info'} detail="Integrations allowed to use live credentials" />
       </div>
       <div className="panel wide-panel">
         <PanelHeader title="Integration Keys" action={canCreateKeys ? 'Create key' : undefined} onAction={canCreateKeys ? openKeyModal : undefined} />
@@ -3201,6 +3252,9 @@ function ScopeDecisionQueue({
   return (
     <div className="operator-form">
       <h3>Permission requests awaiting review</h3>
+      <p className="security-note">
+        Review only the requested capability, require a clear business reason, and reject anything that asks for more access than the integration needs.
+      </p>
       {pendingRequests.length ? pendingRequests.map((request) => {
         const requestId = String(request.requestId || '');
         return (
