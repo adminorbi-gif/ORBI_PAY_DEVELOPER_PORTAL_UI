@@ -167,11 +167,12 @@ export function App() {
     if (docsRouteOpen) return;
     const query = new URLSearchParams(window.location.search);
     query.set('section', section);
-    query.set('env', environment);
     if (roleCanManageServices(role)) {
       query.set('admin', 'true');
       query.set('role', role);
+      query.delete('env');
     } else {
+      query.set('env', environment);
       query.delete('admin');
       query.delete('role');
     }
@@ -537,10 +538,10 @@ function EnvironmentSwitch({
 }) {
   return (
     <div className={`environment-context ${compact ? 'compact' : ''} ${roleCanManageServices(role) ? 'staff' : 'developer'}`}>
-      <span>{roleCanManageServices(role) ? 'Control environment' : 'Access'}</span>
+      <span>{roleCanManageServices(role) ? 'Control scope' : 'Access'}</span>
       <strong>
         {roleCanManageServices(role)
-          ? `${environment === 'live' ? 'Production' : 'Sandbox'} control`
+          ? 'General control'
           : 'Sandbox workspace'}
       </strong>
     </div>
@@ -579,7 +580,7 @@ function ConnectionBanner({
         <strong>{healthReady ? 'Connected' : 'Loading workspace'}</strong>
         <span>
           {isStaff
-            ? `${config.baseUrl} · ${config.environment} · ${state.lastLoadedAt ? `loaded ${state.lastLoadedAt.toLocaleTimeString()}` : 'not loaded yet'}`
+            ? `Operations control · ${state.lastLoadedAt ? `loaded ${state.lastLoadedAt.toLocaleTimeString()}` : 'not loaded yet'}`
             : state.lastLoadedAt
               ? `Last refreshed ${state.lastLoadedAt.toLocaleTimeString()}`
               : 'Preparing your developer workspace'}
@@ -621,9 +622,9 @@ function EnterpriseCommandStrip({
         <small>{roleMeta[role].subtitle}</small>
       </div>
       <div className="command-card">
-        <span>Environment</span>
-        <strong>{environment === 'live' ? 'Production' : 'Sandbox'}</strong>
-        <small>{environment === 'live' ? 'Real customer payments' : 'Safe test payments'}</small>
+        <span>{isStaff ? 'Scope' : 'Environment'}</span>
+        <strong>{isStaff ? 'General control' : environment === 'live' ? 'Production' : 'Sandbox'}</strong>
+        <small>{isStaff ? 'All approved operations areas' : environment === 'live' ? 'Real customer payments' : 'Safe test payments'}</small>
       </div>
       <div className="command-card">
         <span>{isStaff ? 'Management' : 'Next step'}</span>
