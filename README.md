@@ -17,6 +17,7 @@ Create `.env.local` from `.env.example`:
 ```env
 VITE_ORBI_PORTAL_BFF_BASE_URL=/api/portal
 VITE_ORBI_PORTAL_ENVIRONMENT=sandbox
+VITE_ORBI_PORTAL_PUBLIC_URL=https://developers.orbifinancial.com
 ```
 
 Production browser bundles must not expose operator keys, service keys, webhook
@@ -25,6 +26,10 @@ Vercel BFF reads server-only gateway proxy variables without the `VITE_` prefix.
 It does not connect to the database and it does not sign portal sessions. The
 browser must call only `/api/portal/*`; gateway base URLs are server-only proxy
 configuration, not frontend runtime configuration.
+
+`VITE_ORBI_PORTAL_PUBLIC_URL` is the public portal origin used for docs routes
+such as `/docs/domain-verification`. It must point to the portal domain, not
+`pay.orbifinancial.com` or `sandbox-pay.orbifinancial.com`.
 
 Server-only Vercel variables for the portal proxy only:
 

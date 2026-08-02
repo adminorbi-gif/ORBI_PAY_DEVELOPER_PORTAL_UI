@@ -3080,7 +3080,7 @@ function EndpointErrors({ errors, role }: { errors: Array<{ name: string; error:
 
 function DocCard({ item }: { item: Record<string, unknown> }) {
   const id = String(item.id || '');
-  const href = `/docs/${encodeURIComponent(id)}`;
+  const href = `${portalPublicOrigin()}/docs/${encodeURIComponent(id)}`;
   return (
     <a className="doc-card" href={href} target="_blank" rel="noreferrer">
       <ChevronRight size={22} />
@@ -3129,6 +3129,16 @@ function DocReader({ item, onClose }: { item: Record<string, unknown>; onClose?:
 function sdkDocsHref(baseUrl: string, path: string) {
   if (!path) return '#';
   return path.startsWith('http') ? path : `${baseUrl}${path}`;
+}
+
+function portalPublicOrigin() {
+  const configured = String(import.meta.env.VITE_ORBI_PORTAL_PUBLIC_URL || '').replace(/\/+$/, '');
+  if (configured) return configured;
+  const current = window.location.origin.replace(/\/+$/, '');
+  if (/^https:\/\/(sandbox-)?pay\.orbifinancial\.com$/i.test(current)) {
+    return 'https://orbi-pay-developer-portal-ui.vercel.app';
+  }
+  return current;
 }
 
 function docIdFromPath(pathname: string) {
