@@ -889,17 +889,45 @@ a {
   gap: 10px;
 }
 
+.verification-intro {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border-radius: 16px;
+  background: rgba(31, 122, 140, 0.08);
+}
+
+.verification-intro span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 .verification-step {
   display: grid;
-  gap: 6px;
+  gap: 10px;
   padding: 12px;
   border: 1px solid rgba(31, 122, 140, 0.18);
   border-radius: 16px;
   background: rgba(255, 255, 255, 0.78);
 }
 
+.verification-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.verification-field span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .verification-step span,
-.verification-step code {
+.verification-step code,
+.verification-step small {
   min-width: 0;
   overflow-wrap: anywhere;
 }
@@ -910,6 +938,29 @@ a {
   background: #0e1f2a;
   color: #e7f7f5;
   font-size: 0.78rem;
+}
+
+.mini-copy {
+  border: 1px solid rgba(31, 122, 140, 0.2);
+  border-radius: 999px;
+  padding: 7px 10px;
+  background: #ffffff;
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.https-fallback {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.https-fallback summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-weight: 700;
 }
 
 .service-actions,

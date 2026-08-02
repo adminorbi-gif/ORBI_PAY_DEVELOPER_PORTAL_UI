@@ -777,7 +777,7 @@ function DomainVerificationAction({
       return;
     }
     setInstructions(result.data);
-    setMessage('Add one proof method for each domain, then press Verify now.');
+    setMessage('Add the DNS TXT record for each domain, wait for DNS propagation, then press Verify DNS.');
   };
 
   const verify = async () => {
@@ -797,7 +797,7 @@ function DomainVerificationAction({
       ? (result.data as { pending?: unknown[] }).pending || []
       : [];
     setInstructions((result.data as { domainVerification?: Record<string, unknown> }).domainVerification);
-    setMessage(pending.length ? 'Verification proof not found yet. Check DNS/HTTPS setup and try again.' : 'Domains verified. Live keys can now be issued.');
+    setMessage(pending.length ? 'DNS proof not found yet. Check the TXT name/value, wait a few minutes, and try again.' : 'Domains verified. Live keys can now be issued.');
     if (!pending.length) refresh();
   };
 
@@ -809,21 +809,38 @@ function DomainVerificationAction({
     <div className="domain-verification-action">
       <div className="row-actions">
         <button className="ghost-action" disabled={working} onClick={loadInstructions}>
-          <Globe size={14} /> Setup verification
+          <Globe size={14} /> Show DNS setup
         </button>
         <button className="ghost-action" disabled={working} onClick={verify}>
-          <Check size={14} /> Verify now
+          <Check size={14} /> Verify DNS
         </button>
       </div>
       {challenges.length > 0 && (
         <div className="verification-steps">
+          <div className="verification-intro">
+            <strong>Verify ownership with DNS TXT</strong>
+            <span>Add these TXT records where your domain DNS is managed, for example Cloudflare, cPanel, Namecheap, GoDaddy, or your hosting DNS panel.</span>
+          </div>
           {challenges.map((challenge) => (
             <div key={String(challenge.domain)} className="verification-step">
               <strong>{String(challenge.domain)}</strong>
-              <span>DNS TXT name: {String(challenge.dnsRecordName)}</span>
-              <code>{String(challenge.dnsRecordValue)}</code>
-              <span>Or HTTPS file: {String(challenge.httpsUrl)}</span>
-              <code>{String(challenge.token)}</code>
+              <div className="verification-field">
+                <span>TXT name</span>
+                <code>{String(challenge.dnsRecordName)}</code>
+                <button type="button" className="mini-copy" onClick={() => navigator.clipboard?.writeText(String(challenge.dnsRecordName))}>Copy</button>
+              </div>
+              <div className="verification-field">
+                <span>TXT value</span>
+                <code>{String(challenge.dnsRecordValue)}</code>
+                <button type="button" className="mini-copy" onClick={() => navigator.clipboard?.writeText(String(challenge.dnsRecordValue))}>Copy</button>
+              </div>
+              <small>Cloudflare tip: if your domain is {String(challenge.domain)}, add the record name shown above. TTL can stay Auto. TXT records are DNS-only.</small>
+              <details className="https-fallback">
+                <summary>Alternative HTTPS file method</summary>
+                <span>Publish this URL as plain text if DNS access is not available:</span>
+                <code>{String(challenge.httpsUrl)}</code>
+                <code>{String(challenge.token)}</code>
+              </details>
             </div>
           ))}
         </div>
