@@ -75,6 +75,14 @@ type PortalState = {
   lastLoadedAt?: Date;
 };
 
+type PortalSearchResult = {
+  id: string;
+  section: SectionId;
+  title: string;
+  detail: string;
+  label: string;
+};
+
 const roleMeta: Record<PortalRole, { label: string; subtitle: string; initials: string; policy: string }> = {
   public_developer: {
     label: 'Explore ORBI Pay',
@@ -129,6 +137,8 @@ export function App() {
   const [authOpen, setAuthOpen] = useState(() => Boolean(initialQuery.get('invite_token')));
   const [authMode, setAuthMode] = useState<'signin' | 'signup'>(initialQuery.get('admin') === 'true' ? 'signin' : 'signin');
   const [mfaStepUpOpen, setMfaStepUpOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [portalState, setPortalState] = useState<PortalState>({ loading: true, errors: [] });
 
   const config = useMemo(() => ({ ...getPortalConfig(environment), sessionToken: session?.token }), [environment, session?.token]);
@@ -283,7 +293,20 @@ export function App() {
   const navigate = (next: SectionId) => {
     setSection(next);
     setSidebarOpen(false);
+    setSearchOpen(false);
+    setSearchQuery('');
   };
+  const searchResults = useMemo(
+    () => buildPortalSearchResults(portalState.snapshot, role).filter((result) => {
+      const query = searchQuery.trim().toLowerCase();
+      if (!query) return false;
+      return [result.title, result.detail, result.label, titleFor[result.section]]
+        .join(' ')
+        .toLowerCase()
+        .includes(query);
+    }).slice(0, 10),
+    [portalState.snapshot, role, searchQuery],
+  );
 
   const signOut = async () => {
     await logoutPortal(config);
@@ -399,7 +422,39 @@ export function App() {
           </button>
           <div className="search-box">
             <Search size={17} />
-            <input placeholder="Search integrations, permissions, activity..." />
+            <input
+              value={searchQuery}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setSearchOpen(true);
+              }}
+              onFocus={() => setSearchOpen(true)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && searchResults[0]) {
+                  navigate(searchResults[0].section);
+                }
+                if (event.key === 'Escape') setSearchOpen(false);
+              }}
+              placeholder="Search integrations, permissions, activity..."
+            />
+            {searchOpen && searchQuery.trim() ? (
+              <div className="search-results" role="listbox">
+                {searchResults.length ? searchResults.map((result) => (
+                  <button
+                    key={result.id}
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => navigate(result.section)}
+                  >
+                    <span>{result.label}</span>
+                    <strong>{result.title}</strong>
+                    <small>{result.detail}</small>
+                  </button>
+                )) : (
+                  <div className="search-empty">No result found for “{searchQuery.trim()}”.</div>
+                )}
+              </div>
+            ) : null}
           </div>
           <h1>{docsRouteOpen ? 'Developer Docs' : titleFor[section]}</h1>
           <EnvironmentSwitch environment={environment} role={role} />
@@ -529,6 +584,55 @@ function isSectionVisibleForRole(section: SectionId, role: PortalRole) {
   if (role === 'developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime', 'keys', 'messages', 'scopes', 'webhooks', 'health'].includes(section);
   if (role === 'operator') return ['overview', 'services', 'access', 'keys', 'messages', 'scopes', 'webhooks', 'health', 'incidents', 'events'].includes(section);
   return ['overview', 'services', 'access', 'keys', 'team', 'messages', 'scopes', 'webhooks', 'health', 'incidents', 'events', 'runtime'].includes(section);
+}
+
+function buildPortalSearchResults(snapshot: PortalSnapshot | undefined, role: PortalRole): PortalSearchResult[] {
+  const visibleSections = new Set(navItems.filter((item) => isSectionVisibleForRole(item.id, role)).map((item) => item.id));
+  const results: PortalSearchResult[] = [];
+  const add = (section: SectionId, title: string, detail: string, label = titleFor[section]) => {
+    if (!visibleSections.has(section)) return;
+    const cleanTitle = title.trim();
+    if (!cleanTitle) return;
+    results.push({
+      id: `${section}:${results.length}:${cleanTitle}`,
+      section,
+      title: cleanTitle,
+      detail: detail.trim() || titleFor[section],
+      label,
+    });
+  };
+
+  for (const item of navItems) add(item.id, item.label, titleFor[item.id], 'Page');
+  for (const service of snapshot?.services || []) {
+    const code = String(service.serviceCode || service.code || '');
+    add('services', String(service.displayName || service.legalName || code), `${code} ${service.status || ''}`, 'Integration');
+    add('keys', `${code} credentials`, `${valueOf(service, 'keyStatus', 'key_status') || 'Key status'} ${valueOf(service, 'webhookSecretStatus', 'webhook_secret_status') || ''}`, 'Credential');
+  }
+  for (const request of snapshot?.scopeRequests || []) {
+    add('scopes', String(request.serviceCode || 'Permission request'), `${(request.requestedScopes || []).join(', ')} ${request.status || ''}`, 'Permission');
+  }
+  for (const app of snapshot?.applications || []) {
+    add('access', String(app.displayName || app.legalName || app.serviceCode || 'Access request'), `${(app.requestedScopes || []).join(', ')} ${app.status || ''}`, 'Access');
+  }
+  for (const delivery of snapshot?.messagingDeliveries || []) {
+    add('messages', messageTitle(delivery), `${messageBody(delivery)} ${delivery.recipientIdentityRef || ''}`, 'Message');
+  }
+  for (const webhook of snapshot?.webhookDeliveries || []) {
+    add('webhooks', String(webhook.eventType || webhook.deliveryId || 'Payment update'), `${webhook.status || ''} ${webhook.resourceId || ''}`, 'Payment update');
+  }
+  for (const incident of snapshot?.incidents || []) {
+    add('incidents', String(incident.title || incident.incidentType || 'Service issue'), `${incident.status || ''} ${incident.message || ''}`, 'Issue');
+  }
+  for (const event of snapshot?.events || []) {
+    add('events', String(event.eventType || event.eventId || 'Activity'), `${event.serviceCode || ''} ${event.occurredAt || ''}`, 'Activity');
+  }
+  for (const user of snapshot?.portalUsers || []) {
+    add('team', String(user.name || user.email || 'Portal user'), `${user.email || ''} ${user.role || ''}`, 'Team');
+  }
+  for (const doc of snapshot?.docs || []) {
+    add('docs', String(doc.title || doc.id || 'Developer guide'), String(doc.description || doc.category || ''), 'Docs');
+  }
+  return results;
 }
 
 function roleCanManageServices(role: PortalRole) {
