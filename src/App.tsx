@@ -360,7 +360,7 @@ export function App() {
         </div>
       </main>
 
-      {portalState.loading && <GlobalLoadingOverlay message="Loading..." />}
+      {portalState.loading && <GlobalLoadingOverlay />}
 
       {modal && <PortalModal type={modal} config={config} onClose={() => setModal(null)} refresh={loadPortal} />}
       {authOpen && (
@@ -438,11 +438,10 @@ function sectionFromQuery(query: URLSearchParams): SectionId {
   return navItems.some((item) => item.id === requested) ? (requested as SectionId) : 'overview';
 }
 
-function GlobalLoadingOverlay({ message }: { message: string }) {
+function GlobalLoadingOverlay() {
   return (
     <div className="global-loading-overlay" role="status" aria-live="polite">
       <div className="loading-orb" />
-      <strong>{message}</strong>
     </div>
   );
 }
