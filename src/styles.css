@@ -1627,6 +1627,11 @@ tr:last-child td {
   gap: 14px;
   padding: 20px;
   transition: 180ms ease;
+  width: 100%;
+  border: 1px solid rgba(220, 232, 227, 0.92);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
 
 .doc-card:hover {
@@ -1638,6 +1643,64 @@ tr:last-child td {
   display: block;
   color: var(--muted);
   font-size: 13px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.doc-reader {
+  display: grid;
+  gap: 22px;
+}
+
+.doc-reader-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+}
+
+.doc-reader-head h2 {
+  margin: 10px 0 8px;
+  font-size: clamp(28px, 4vw, 46px);
+  letter-spacing: -0.06em;
+}
+
+.doc-reader-head p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.doc-section-list {
+  display: grid;
+  gap: 14px;
+}
+
+.doc-section {
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(248, 250, 252, 0.86);
+}
+
+.doc-section h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.doc-section p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.doc-section pre {
+  margin: 14px 0 0;
+  overflow-x: auto;
+  padding: 14px;
+  border-radius: 14px;
+  background: #071815;
+  color: #a7f3d0;
 }
 
 .code-panel pre {

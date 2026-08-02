@@ -105,6 +105,7 @@ const money = new Intl.NumberFormat('en-TZ', {
 });
 
 export function App() {
+  const docRouteId = docIdFromPath(window.location.pathname);
   const [section, setSection] = useState<SectionId>('overview');
   const [session, setSession] = useState<PortalSession | undefined>(() => readStoredPortalSession());
   const role = session?.user.role || 'public_developer';
@@ -241,7 +242,7 @@ export function App() {
             <Search size={17} />
             <input placeholder="Search integrations, permissions, activity..." />
           </div>
-          <h1>{titleFor[section]}</h1>
+          <h1>{docRouteId ? 'Developer Docs' : titleFor[section]}</h1>
           <EnvironmentSwitch environment={environment} setEnvironment={setEnvironment} role={role} snapshot={portalState.snapshot} />
           {roleCanManageServices(role) ? (
             <button className="primary-action" onClick={() => setModal('service')}>
@@ -278,14 +279,18 @@ export function App() {
               Production mode processes real money. Use only approved live keys and verified customer flows.
             </div>
           )}
-          <SectionRenderer
-            section={section}
-            role={role}
-            config={config}
-            portalState={portalState}
-            refresh={loadPortal}
-            openKeyModal={() => setModal('key')}
-          />
+          {docRouteId ? (
+            <Docs state={portalState} config={config} routeDocId={docRouteId} />
+          ) : (
+            <SectionRenderer
+              section={section}
+              role={role}
+              config={config}
+              portalState={portalState}
+              refresh={loadPortal}
+              openKeyModal={() => setModal('key')}
+            />
+          )}
         </div>
       </main>
 
@@ -2414,15 +2419,29 @@ function IncidentCard({ config, incident, refresh }: { config: PortalConfig; inc
   );
 }
 
-function Docs({ state, config }: { state: PortalState; config: PortalConfig }) {
+function Docs({ state, config, routeDocId }: { state: PortalState; config: PortalConfig; routeDocId?: string }) {
   const docs = state.snapshot?.docs || [];
   const sdks = state.snapshot?.sdks || [];
+  const routedDoc = routeDocId ? docs.find((doc) => String(doc.id || '') === routeDocId) : undefined;
+  if (routeDocId) {
+    return routedDoc ? (
+      <div className="stack">
+        <DocReader item={routedDoc} />
+      </div>
+    ) : (
+      <div className="panel wide-panel">
+        <EmptyState title="Guide is loading" detail="If this stays here, return to Docs and open the guide again." />
+      </div>
+    );
+  }
   return (
     <div className="stack">
       <div className="panel wide-panel">
-        <PanelHeader title="Maintained Docs Catalog" />
+        <PanelHeader title="Developer guides" />
         <div className="docs-grid">
-          {docs.length ? docs.map((doc, index) => <DocCard item={doc} baseUrl={config.baseUrl} key={String(doc.id || index)} />) : (
+          {docs.length ? docs.map((doc, index) => (
+            <DocCard item={doc} key={String(doc.id || index)} />
+          )) : (
             <EmptyState title="Documentation is temporarily unavailable" detail="Refresh the page or try again shortly." />
           )}
         </div>
@@ -2435,7 +2454,7 @@ function Docs({ state, config }: { state: PortalState; config: PortalConfig }) {
             String(sdk.language || sdk.id || '-'),
             String(sdk.packageName || sdk.package || '-'),
             <StatusPill tone={sdkStatusTone(sdk.status)}>{sdkStatusLabel(sdk.status)}</StatusPill>,
-            <a className="ghost-action" href={`${config.baseUrl}${String(sdk.docsPath || '')}`} target="_blank" rel="noreferrer">
+            <a className="ghost-action" href={sdkDocsHref(config.baseUrl, String(sdk.docsPath || ''))} target="_blank" rel="noreferrer">
               Open <ExternalLink size={14} />
             </a>,
           ])}
@@ -3059,19 +3078,62 @@ function EndpointErrors({ errors, role }: { errors: Array<{ name: string; error:
   );
 }
 
-function DocCard({ item, baseUrl }: { item: Record<string, unknown>; baseUrl: string }) {
-  const path = String(item.path || item.docsPath || '#');
-  const href = path.startsWith('http') ? path : `${baseUrl}${path}`;
+function DocCard({ item }: { item: Record<string, unknown> }) {
+  const id = String(item.id || '');
+  const href = `/docs/${encodeURIComponent(id)}`;
   return (
     <a className="doc-card" href={href} target="_blank" rel="noreferrer">
-      <ExternalLink size={22} />
+      <ChevronRight size={22} />
       <div>
         <strong>{String(item.title || item.id || 'Developer resource')}</strong>
-        <span>{String(item.category || item.status || item.description || 'ORBI Pay resource')}</span>
+        <span>{String(item.description || item.category || item.status || 'ORBI Pay resource')}</span>
       </div>
       <ArrowRight size={15} />
     </a>
   );
+}
+
+function DocReader({ item, onClose }: { item: Record<string, unknown>; onClose?: () => void }) {
+  const sections = Array.isArray(item.sections) ? item.sections as Array<Record<string, unknown>> : [];
+  return (
+    <article className="panel wide-panel doc-reader">
+      <div className="doc-reader-head">
+        <div>
+          <StatusPill tone="info">{String(item.category || 'Guide')}</StatusPill>
+          <h2>{String(item.title || 'Developer guide')}</h2>
+          <p>{String(item.description || '')}</p>
+        </div>
+        {onClose ? (
+          <button type="button" className="ghost-action" onClick={onClose}>
+            <X size={14} /> Close
+          </button>
+        ) : (
+          <a className="ghost-action" href="/">
+            <ArrowLeft size={14} /> Portal home
+          </a>
+        )}
+      </div>
+      <div className="doc-section-list">
+        {sections.map((section, index) => (
+          <section className="doc-section" key={`${String(item.id || 'doc')}-${index}`}>
+            <h3>{String(section.heading || `Step ${index + 1}`)}</h3>
+            <p>{String(section.body || '')}</p>
+            {section.code ? <pre>{String(section.code)}</pre> : null}
+          </section>
+        ))}
+      </div>
+    </article>
+  );
+}
+
+function sdkDocsHref(baseUrl: string, path: string) {
+  if (!path) return '#';
+  return path.startsWith('http') ? path : `${baseUrl}${path}`;
+}
+
+function docIdFromPath(pathname: string) {
+  const match = pathname.match(/^\/docs\/([^/]+)$/);
+  return match ? decodeURIComponent(match[1]) : undefined;
 }
 
 function MetricCard({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: StatusTone }) {
