@@ -1914,6 +1914,7 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
   const [name, setName] = useState('');
   const [role, setRole] = useState<'developer' | 'operator' | 'admin'>('developer');
   const [password, setPassword] = useState('');
+  const [serviceCodes, setServiceCodes] = useState('');
   const [mfaRequired, setMfaRequired] = useState(true);
   const [liveAccess, setLiveAccess] = useState(false);
   const [message, setMessage] = useState<string>();
@@ -1955,7 +1956,15 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
           'Content-Type': 'application/json',
           ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
         },
-        body: JSON.stringify({ email, name, role, password, mfaRequired, liveAccess }),
+        body: JSON.stringify({
+          email,
+          name,
+          role,
+          password,
+          mfaRequired,
+          liveAccess,
+          serviceCodes: serviceCodes.split(',').map((item) => item.trim()).filter(Boolean),
+        }),
       });
       const body = await response.json().catch(() => null);
       setMessage(response.ok ? 'Portal account created.' : String(body?.error || `Request failed with HTTP ${response.status}`));
@@ -1963,10 +1972,63 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
         setEmail('');
         setName('');
         setPassword('');
+        setServiceCodes('');
         refresh();
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : 'Unable to create portal account.');
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const updateUserStatus = async (user: PortalUser, enabled: boolean) => {
+    if (!user.userId) return;
+    const reason = window.prompt(
+      enabled
+        ? `Why are you restoring access for ${user.email}?`
+        : `Why are you suspending access for ${user.email}?`,
+    );
+    if (!reason?.trim() || reason.trim().length < 10) {
+      setMessage('Add a clear reason with at least 10 characters.');
+      return;
+    }
+    if (!window.confirm(`${enabled ? 'Restore' : 'Suspend'} portal access for ${user.email}?\n\nThis action is audited.`)) return;
+    setWorking(true);
+    setMessage(undefined);
+    try {
+      const url = new URL(`${config.bffBaseUrl}/users/${encodeURIComponent(user.userId)}`, window.location.origin);
+      url.searchParams.set('environment', config.environment);
+      const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          ...(config.sessionToken ? { Authorization: `Bearer ${config.sessionToken}` } : {}),
+          'x-orbi-portal-confirmation': 'true',
+          'x-orbi-portal-reason': reason.trim(),
+        },
+        body: JSON.stringify({
+          name: user.name,
+          role: user.role,
+          permissions: user.permissions || [],
+          liveAccess: Boolean(user.liveAccess),
+          serviceCodes: user.serviceCodes || [],
+          mfaRequired: Boolean(user.mfaRequired),
+          enabled,
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      const error = String(body?.error || `Update failed with HTTP ${response.status}`);
+      if (response.status === 403 && /fresh mfa|required.*mfa|mfa.*required/i.test(error)) {
+        window.dispatchEvent(new CustomEvent('orbi-mfa-step-up-required'));
+        setMessage('Verify your authenticator code, then retry the access change.');
+      } else {
+        setMessage(response.ok ? `Portal access ${enabled ? 'restored' : 'suspended'} for ${user.email}.` : error);
+      }
+      if (response.ok) refresh();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Unable to update portal access.');
     } finally {
       setWorking(false);
     }
@@ -2029,7 +2091,11 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
               <option value="admin">Admin</option>
             </select>
           </label>
-          <label>Password<input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Minimum 12 characters" /></label>
+          <PasswordField value={password} onChange={setPassword} label="Password" placeholder="Minimum 12 characters" autoComplete="new-password" />
+          <label>
+            Integration codes
+            <input value={serviceCodes} onChange={(event) => setServiceCodes(event.target.value)} placeholder="service_a, service_b" />
+          </label>
         </div>
         <div className="toggle-row">
           <label><input type="checkbox" checked={mfaRequired} onChange={(event) => setMfaRequired(event.target.checked)} /> Require MFA</label>
@@ -2045,21 +2111,31 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
       <div className="panel wide-panel">
         <PanelHeader title="Active Portal Users" />
         <DataTable
-          columns={['Name', 'Email', 'Role', 'MFA', 'Live', 'Status', 'Security']}
+          columns={['Name', 'Email', 'Role', 'Integrations', 'MFA', 'Live', 'Status', 'Security']}
           rows={users.map((user) => [
             String(user.name || '-'),
             String(user.email || '-'),
             <StatusPill tone={user.role === 'admin' ? 'danger' : user.role === 'operator' ? 'warning' : 'info'}>{String(user.role || 'developer')}</StatusPill>,
+            arrayValue(user, 'serviceCodes', 'service_codes').join(', ') || 'All allowed by role',
             user.mfaRequired ? 'Required' : 'Not required',
             user.liveAccess ? 'Enabled' : 'Sandbox only',
             user.enabled === false ? 'Disabled' : 'Enabled',
-            <button
-              className="mini-link"
-              disabled={working || !user.mfaRequired || user.email === readStoredPortalSession()?.user.email}
-              onClick={() => resetMfa(user)}
-            >
-              Reset MFA
-            </button>,
+            <div className="row-actions">
+              <button
+                className="mini-link"
+                disabled={working || !user.mfaRequired || user.email === readStoredPortalSession()?.user.email}
+                onClick={() => resetMfa(user)}
+              >
+                Reset MFA
+              </button>
+              <button
+                className={`mini-link ${user.enabled === false ? '' : 'danger-link'}`}
+                disabled={working || user.email === readStoredPortalSession()?.user.email}
+                onClick={() => updateUserStatus(user, user.enabled === false)}
+              >
+                {user.enabled === false ? 'Restore' : 'Suspend'}
+              </button>
+            </div>,
           ])}
           empty="No portal users returned. Team access is managed by approved ORBI administrators."
         />
@@ -3648,6 +3724,50 @@ function Copyable({ value }: { value: string }) {
   );
 }
 
+function PasswordField({
+  value,
+  onChange,
+  label,
+  placeholder,
+  autoComplete,
+  hideLabel = false,
+  onEnter,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  label?: string;
+  placeholder?: string;
+  autoComplete?: string;
+  hideLabel?: boolean;
+  onEnter?: () => void;
+}) {
+  const [visible, setVisible] = useState(false);
+  const field = (
+    <div className="password-field">
+      <input
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        type={visible ? 'text' : 'password'}
+        autoComplete={autoComplete}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') onEnter?.();
+        }}
+      />
+      <button type="button" onClick={() => setVisible((current) => !current)} aria-label={visible ? 'Hide password' : 'Show password'}>
+        {visible ? 'Hide' : 'Show'}
+      </button>
+    </div>
+  );
+  if (hideLabel) return field;
+  return (
+    <label>
+      {label || 'Password'}
+      {field}
+    </label>
+  );
+}
+
 function maskSecret(value: unknown): string {
   const text = String(value || '').trim();
   if (!text) return '-';
@@ -3910,12 +4030,12 @@ function AuthModal({
               </label>
               <label>
                 Password
-                <input
+                <PasswordField
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={setPassword}
                   placeholder="At least 12 characters"
-                  type="password"
                   autoComplete="new-password"
+                  hideLabel
                 />
               </label>
             </div>
@@ -3966,15 +4086,13 @@ function AuthModal({
               </label>
               <label>
                 Password
-                <input
+                <PasswordField
                   value={password}
-                  onChange={(event) => setPassword(event.target.value)}
+                  onChange={setPassword}
                   placeholder="Your portal password"
-                  type="password"
                   autoComplete="current-password"
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') void submitLogin();
-                  }}
+                  hideLabel
+                  onEnter={() => void submitLogin()}
                 />
               </label>
               {useRecoveryCode ? (

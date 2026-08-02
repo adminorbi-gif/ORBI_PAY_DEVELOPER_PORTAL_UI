@@ -1481,8 +1481,38 @@ tr:last-child td {
 }
 
 .copyable span {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.password-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.password-field input {
+  min-width: 0;
+}
+
+.password-field button {
+  height: 100%;
+  min-height: 42px;
+  padding: 0 13px;
+  color: #0f766e;
+  font-size: 12px;
+  font-weight: 900;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #f0fdfa;
+}
+
+.danger-link {
+  color: #991b1b;
 }
 
 .endpoint-grid,
