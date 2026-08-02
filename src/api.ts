@@ -118,6 +118,7 @@ export type WebhookDelivery = Record<string, unknown> & {
 export type MessagingDelivery = Record<string, unknown> & {
   deliveryId?: string;
   eventId?: string;
+  threadId?: string;
   templateCode?: string;
   channel?: string;
   language?: string;
@@ -125,6 +126,9 @@ export type MessagingDelivery = Record<string, unknown> & {
   status?: string;
   attempt?: number;
   statusCode?: number;
+  readBy?: string[];
+  readAtBy?: Record<string, string>;
+  safeMetadata?: Record<string, unknown>;
   createdAt?: string;
 };
 

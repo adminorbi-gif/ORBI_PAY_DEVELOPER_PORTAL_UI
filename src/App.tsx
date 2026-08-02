@@ -157,6 +157,36 @@ export function App() {
     });
   };
 
+  const markMessagingRead = (payload: { threadId?: string; deliveryIds?: string[]; readBy?: string; readAt?: string }) => {
+    const readBy = String(payload.readBy || '').toLowerCase();
+    if (!readBy) return;
+    const readAt = String(payload.readAt || new Date().toISOString());
+    const ids = new Set((payload.deliveryIds || []).map((item) => String(item)));
+    setPortalState((current) => {
+      if (!current.snapshot) return current;
+      return {
+        ...current,
+        snapshot: {
+          ...current.snapshot,
+          messagingDeliveries: (current.snapshot.messagingDeliveries || []).map((delivery) => {
+            const sameThread = payload.threadId && messageThreadId(delivery) === payload.threadId;
+            const sameDelivery = ids.has(String(delivery.deliveryId || ''));
+            if (!sameThread && !sameDelivery) return delivery;
+            const nextReadBy = new Set([...(delivery.readBy || []).map((item) => item.toLowerCase()), readBy]);
+            return {
+              ...delivery,
+              readBy: [...nextReadBy],
+              readAtBy: {
+                ...(delivery.readAtBy || {}),
+                [readBy]: readAt,
+              },
+            };
+          }),
+        },
+      };
+    });
+  };
+
   useEffect(() => {
     if (!roleCanManageServices(role) && environment !== 'sandbox') {
       setEnvironment('sandbox');
@@ -196,6 +226,8 @@ export function App() {
           const message = JSON.parse(String(event.data || '{}'));
           if (message?.type === 'portal.message.created' && message.payload) {
             pushMessagingDelivery(message.payload as MessagingDelivery);
+          } else if (message?.type === 'portal.message.read' && message.payload) {
+            markMessagingRead(message.payload as { threadId?: string; deliveryIds?: string[]; readBy?: string; readAt?: string });
           }
         } catch {
           // Ignore malformed realtime frames; REST snapshot remains the source of truth.
@@ -260,7 +292,7 @@ export function App() {
     setSection('overview');
   };
   const messageNotificationCount = (portalState.snapshot?.messagingDeliveries || [])
-    .filter((delivery) => ['queued', 'sent', 'delivered', 'failed'].includes(String(delivery.status || '').toLowerCase()))
+    .filter((delivery) => isUnreadMessageFor(delivery, session?.user.email))
     .slice(0, 99)
     .length;
 
@@ -414,6 +446,7 @@ export function App() {
               role={role}
               config={config}
               portalState={portalState}
+              currentUser={session?.user}
               refresh={loadPortal}
               openKeyModal={() => setModal('key')}
             />
@@ -517,6 +550,33 @@ function formatShortDate(value: string) {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function messageThreadId(delivery: MessagingDelivery) {
+  const metaThread = delivery.safeMetadata?.threadId;
+  return String(delivery.threadId || (typeof metaThread === 'string' ? metaThread : '') || delivery.serviceCode || delivery.recipientIdentityRef || delivery.eventId || 'general');
+}
+
+function isUnreadMessageFor(delivery: MessagingDelivery, email?: string) {
+  const viewer = String(email || '').trim().toLowerCase();
+  if (!viewer) return false;
+  const readBy = new Set((delivery.readBy || []).map((item) => String(item).toLowerCase()));
+  const sentBy = String(delivery.safeMetadata?.sentBy || '').toLowerCase();
+  if (sentBy === viewer) return false;
+  return !readBy.has(viewer);
+}
+
+function messageTitle(delivery: MessagingDelivery) {
+  const subject = delivery.safeMetadata?.emailSubject;
+  if (typeof subject === 'string' && subject.trim()) return subject.trim();
+  const service = String(delivery.serviceCode || '').trim();
+  if (service) return service;
+  return String(delivery.recipientIdentityRef || 'General conversation');
+}
+
+function messageBody(delivery: MessagingDelivery) {
+  const body = delivery.safeMetadata?.emailBody;
+  return typeof body === 'string' ? body : '';
 }
 
 function GlobalLoadingOverlay() {
@@ -644,6 +704,7 @@ function SectionRenderer({
   role,
   config,
   portalState,
+  currentUser,
   refresh,
   openKeyModal,
 }: {
@@ -651,6 +712,7 @@ function SectionRenderer({
   role: PortalRole;
   config: PortalConfig;
   portalState: PortalState;
+  currentUser?: PortalUser;
   refresh: () => void;
   openKeyModal: () => void;
 }) {
@@ -663,7 +725,7 @@ function SectionRenderer({
   if (section === 'sandbox') return <SandboxSetup config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'keys') return <KeysAndSecrets config={config} state={portalState} refresh={refresh} openKeyModal={openKeyModal} role={role} />;
   if (section === 'team') return <TeamAccess config={config} state={portalState} refresh={refresh} />;
-  if (section === 'messages') return <DeveloperMessages config={config} state={portalState} refresh={refresh} role={role} />;
+  if (section === 'messages') return <DeveloperMessages config={config} state={portalState} refresh={refresh} role={role} currentUser={currentUser} />;
   if (section === 'scopes') return <ScopesAndConsent config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'webhooks') return <Webhooks config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'health') return <Health state={portalState} />;
@@ -2833,11 +2895,13 @@ function DeveloperMessages({
   state,
   refresh,
   role,
+  currentUser,
 }: {
   config: PortalConfig;
   state: PortalState;
   refresh: () => void;
   role: PortalRole;
+  currentUser?: PortalUser;
 }) {
   const isStaff = roleCanManageServices(role);
   const users = state.snapshot?.portalUsers || [];
@@ -2849,8 +2913,26 @@ function DeveloperMessages({
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [reason, setReason] = useState('');
+  const [selectedThreadId, setSelectedThreadId] = useState('');
   const [status, setStatus] = useState<string>();
   const [working, setWorking] = useState(false);
+  const viewerEmail = currentUser?.email || readStoredPortalSession()?.user.email || '';
+  const threads = groupMessageThreads(deliveries);
+  const activeThread = threads.find((thread) => thread.threadId === selectedThreadId) || threads[0];
+  const activeMessages = activeThread?.deliveries || [];
+
+  useEffect(() => {
+    if (!selectedThreadId && threads[0]?.threadId) setSelectedThreadId(threads[0].threadId);
+  }, [selectedThreadId, threads]);
+
+  useEffect(() => {
+    if (!activeThread?.threadId || !viewerEmail) return;
+    if (!activeThread.deliveries.some((delivery) => isUnreadMessageFor(delivery, viewerEmail))) return;
+    void gatewayRequest(config, `/v1/developer/message-threads/${encodeURIComponent(activeThread.threadId)}/read`, isStaff ? 'operator' : 'none', {
+      method: 'POST',
+      body: JSON.stringify({ readBy: viewerEmail }),
+    });
+  }, [activeThread?.threadId, config.baseUrl, config.bffBaseUrl, config.environment, config.sessionToken, isStaff, viewerEmail]);
 
   const appendTag = (tag: string) => {
     const clean = tag.startsWith('@') ? tag : `@${tag}`;
@@ -2865,6 +2947,7 @@ function DeveloperMessages({
       portalReason: reason,
       body: JSON.stringify({
         recipientIdentityRef: isStaff ? recipient : 'orbi.developers@gmail.com',
+        threadId: activeThread?.threadId,
         channel: isStaff ? channel : 'email',
         language: 'en',
         subject: subject.trim() || undefined,
@@ -2888,95 +2971,140 @@ function DeveloperMessages({
 
   const canSend = body.trim().length >= 8 && reason.trim().length >= 10 && (!isStaff || recipient.trim().length >= 3);
   const endpointSuggestions = ['/v1/payment-intents', '/v1/paysafe/escrows', '/v1/developer/webhooks', '/v1/identity/resolve'];
-  const recent = deliveries.slice(0, 12);
 
   return (
     <div className="stack">
       <div className="panel wide-panel">
-        <PanelHeader title={isStaff ? 'Send Developer Message' : 'Contact ORBI IT/Admin'} />
+        <PanelHeader title={isStaff ? 'Developer Messaging Center' : 'ORBI Support Messages'} />
         <p className="section-copy">
           <StatusPill tone="info">{isStaff ? 'Staff controlled' : 'Support channel'}</StatusPill>{' '}
           {isStaff
-            ? 'Send a direct operational message to a developer account. Use @tags to attach an integration or endpoint context.'
-            : 'Send a message to ORBI IT/Admin about your integration, keys, webhook, sandbox, or live access request.'}
+            ? 'Send direct operational messages, reply inside threads, and tag integrations or endpoints with @context.'
+            : 'Ask ORBI support about your integration, keys, payment updates, sandbox, or live access request.'}
         </p>
 
-        <div className="message-composer">
-          {isStaff ? (
-            <label>
-              Developer
-              <select value={recipient} onChange={(event) => setRecipient(event.target.value)}>
-                <option value="">Select developer</option>
-                {developerUsers.map((user) => (
-                  <option key={user.email} value={user.email}>
-                    {user.name} - {user.email}
-                  </option>
-                ))}
-              </select>
-            </label>
-          ) : null}
-          <label>
-            Channel
-            <select value={channel} onChange={(event) => setChannel(event.target.value as typeof channel)} disabled={!isStaff}>
-              <option value="email">Email</option>
-              <option value="push">Push</option>
-              <option value="in_app">In-app</option>
-              <option value="sms">SMS</option>
-              <option value="whatsapp">WhatsApp</option>
-            </select>
-          </label>
-          <label>
-            Subject
-            <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Short, clear subject" />
-          </label>
-          <label className="span-2">
-            Message
-            <textarea
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-              rows={7}
-              placeholder={isStaff ? 'Write a helpful operational message. Example: Please review @orbi-shop webhook failures on @/v1/payment-intents.' : 'Explain what you need help with. Example: I need support with @/v1/payment-intents for @orbi-shop.'}
-            />
-          </label>
-          <label className="span-2">
-            Audit reason
-            <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this message is being sent" />
-          </label>
-        </div>
+        <div className="message-center-grid">
+          <div className="thread-list" aria-label="Message threads">
+            {threads.length ? threads.map((thread) => {
+              const latest = thread.deliveries[0];
+              const unread = thread.deliveries.some((delivery) => isUnreadMessageFor(delivery, viewerEmail));
+              return (
+                <button
+                  className={`thread-item ${thread.threadId === activeThread?.threadId ? 'active' : ''}`}
+                  key={thread.threadId}
+                  onClick={() => setSelectedThreadId(thread.threadId)}
+                >
+                  <span>{messageTitle(latest)}</span>
+                  <small>{messageBody(latest) || String(latest.recipientIdentityRef || 'No preview')}</small>
+                  <b>{formatShortDate(String(latest.createdAt || ''))}</b>
+                  {unread ? <em>Unread</em> : null}
+                </button>
+              );
+            }) : (
+              <EmptyState title="No messages yet" detail="Start a thread when you need to contact a developer or ORBI support." />
+            )}
+          </div>
 
-        <div className="tag-strip">
-          {services.slice(0, 10).map((service) => {
-            const code = String(service.serviceCode || service.code || '');
-            return code ? <button key={code} type="button" onClick={() => appendTag(code)}>@{code}</button> : null;
-          })}
-          {endpointSuggestions.map((endpoint) => (
-            <button key={endpoint} type="button" onClick={() => appendTag(endpoint)}>@{endpoint}</button>
-          ))}
-        </div>
+          <div className="conversation-panel">
+            <div className="conversation-stream">
+              {activeMessages.length ? activeMessages.slice().reverse().map((delivery) => {
+                const sentBy = String(delivery.safeMetadata?.sentBy || 'ORBI').toLowerCase();
+                const mine = viewerEmail && sentBy === viewerEmail.toLowerCase();
+                return (
+                  <div className={`message-bubble ${mine ? 'mine' : ''}`} key={delivery.deliveryId || delivery.eventId}>
+                    <div className="message-meta">
+                      <strong>{mine ? 'You' : String(delivery.safeMetadata?.sentBy || delivery.recipientIdentityRef || 'ORBI')}</strong>
+                      <span>{formatShortDate(String(delivery.createdAt || ''))}</span>
+                    </div>
+                    {messageTitle(delivery) && <h4>{messageTitle(delivery)}</h4>}
+                    <p>{messageBody(delivery) || 'Message body unavailable.'}</p>
+                    <div className="message-foot">
+                      <StatusPill tone={String(delivery.status || '').toLowerCase() === 'failed' ? 'danger' : 'success'}>{String(delivery.status || '-')}</StatusPill>
+                      {delivery.serviceCode ? <small>@{String(delivery.serviceCode)}</small> : null}
+                    </div>
+                  </div>
+                );
+              }) : (
+                <EmptyState title="Select a conversation" detail="Thread replies and delivery status will appear here." />
+              )}
+            </div>
 
-        {status ? <p className="inline-status">{status}</p> : null}
-        <div className="actions-row">
-          <button className="primary-button" disabled={!canSend || working} onClick={sendMessage}>
-            {working ? 'Sending...' : isStaff ? 'Send message' : 'Send to ORBI IT/Admin'}
-          </button>
-        </div>
-      </div>
+            <div className="message-composer compact-composer">
+              {isStaff ? (
+                <label>
+                  Developer
+                  <select value={recipient} onChange={(event) => setRecipient(event.target.value)}>
+                    <option value="">Select developer</option>
+                    {developerUsers.map((user) => (
+                      <option key={user.email} value={user.email}>
+                        {user.name} - {user.email}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+              <label>
+                Channel
+                <select value={channel} onChange={(event) => setChannel(event.target.value as typeof channel)} disabled={!isStaff}>
+                  <option value="email">Email</option>
+                  <option value="push">Push</option>
+                  <option value="in_app">In-app</option>
+                  <option value="sms">SMS</option>
+                  <option value="whatsapp">WhatsApp</option>
+                </select>
+              </label>
+              <label>
+                Subject
+                <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder={activeThread ? 'Reply subject' : 'Short, clear subject'} />
+              </label>
+              <label className="span-2">
+                Message
+                <textarea
+                  value={body}
+                  onChange={(event) => setBody(event.target.value)}
+                  rows={5}
+                  placeholder={isStaff ? 'Write a helpful operational message. Example: Please review @orbi-shop webhook failures on @/v1/payment-intents.' : 'Explain what you need help with. Example: I need support with @/v1/payment-intents for @orbi-shop.'}
+                />
+              </label>
+              <label className="span-2">
+                Audit reason
+                <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this message is being sent" />
+              </label>
+            </div>
 
-      <div className="panel wide-panel">
-        <PanelHeader title="Message Activity" />
-        <DataTable
-          columns={['Time', 'To', 'Context', 'Status']}
-          rows={recent.map((delivery) => [
-            formatShortDate(String(delivery.createdAt || '')),
-            String(delivery.recipientIdentityRef || '-'),
-            String(arrayValue((delivery.safeMetadata || {}) as Record<string, unknown>, 'endpointTags').join(', ') || delivery.serviceCode || delivery.templateCode || '-'),
-            <StatusPill tone={String(delivery.status || '').toLowerCase() === 'failed' ? 'danger' : 'success'}>{String(delivery.status || '-')}</StatusPill>,
-          ])}
-          empty="No message activity returned."
-        />
+            <div className="tag-strip">
+              {services.slice(0, 10).map((service) => {
+                const code = String(service.serviceCode || service.code || '');
+                return code ? <button key={code} type="button" onClick={() => appendTag(code)}>@{code}</button> : null;
+              })}
+              {endpointSuggestions.map((endpoint) => (
+                <button key={endpoint} type="button" onClick={() => appendTag(endpoint)}>@{endpoint}</button>
+              ))}
+            </div>
+
+            {status ? <p className="inline-status">{status}</p> : null}
+            <div className="actions-row">
+              <button className="primary-button" disabled={!canSend || working} onClick={sendMessage}>
+                {working ? 'Sending...' : activeThread ? 'Reply' : isStaff ? 'Send message' : 'Send to ORBI support'}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
+}
+
+function groupMessageThreads(deliveries: MessagingDelivery[]) {
+  const groups = new Map<string, MessagingDelivery[]>();
+  for (const delivery of deliveries) {
+    const threadId = messageThreadId(delivery);
+    groups.set(threadId, [...(groups.get(threadId) || []), delivery]);
+  }
+  return [...groups.entries()].map(([threadId, items]) => ({
+    threadId,
+    deliveries: items.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))),
+  })).sort((a, b) => String(b.deliveries[0]?.createdAt || '').localeCompare(String(a.deliveries[0]?.createdAt || '')));
 }
 
 function tagsFromDraft(value: string) {
