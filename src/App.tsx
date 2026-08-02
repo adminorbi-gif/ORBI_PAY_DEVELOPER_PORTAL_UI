@@ -23,6 +23,7 @@ import {
   getPortalConfig,
   loginPortalWithOtp,
   logoutPortal,
+  portalRealtimeUrl,
   readStoredPortalSession,
   resendPortalDeveloperEmail,
   signupPortalDeveloper,
@@ -44,6 +45,7 @@ import {
   type ServiceRecord,
   type ScopeRequest,
   type WebhookDelivery,
+  type MessagingDelivery,
 } from './api';
 import { Environment, navItems, SectionId, StatusTone } from './data';
 
@@ -136,6 +138,24 @@ export function App() {
     setPortalState({ loading: false, snapshot, errors, lastLoadedAt: new Date() });
   };
 
+  const pushMessagingDelivery = (delivery: MessagingDelivery) => {
+    setPortalState((current) => {
+      if (!current.snapshot) return current;
+      const existing = current.snapshot.messagingDeliveries || [];
+      const deliveryId = String(delivery.deliveryId || '');
+      const nextDeliveries = deliveryId
+        ? [delivery, ...existing.filter((item) => String(item.deliveryId || '') !== deliveryId)]
+        : [delivery, ...existing];
+      return {
+        ...current,
+        snapshot: {
+          ...current.snapshot,
+          messagingDeliveries: nextDeliveries,
+        },
+      };
+    });
+  };
+
   useEffect(() => {
     if (!roleCanManageServices(role) && environment !== 'sandbox') {
       setEnvironment('sandbox');
@@ -161,6 +181,36 @@ export function App() {
   useEffect(() => {
     void loadPortal();
   }, [config.baseUrl, config.bffBaseUrl, config.environment, config.sessionToken]);
+
+  useEffect(() => {
+    if (!session?.token) return;
+    let socket: WebSocket | undefined;
+    let reconnectTimer: number | undefined;
+    let closed = false;
+    const connect = () => {
+      socket = new WebSocket(portalRealtimeUrl(config));
+      socket.onmessage = (event) => {
+        try {
+          const message = JSON.parse(String(event.data || '{}'));
+          if (message?.type === 'portal.message.created' && message.payload) {
+            pushMessagingDelivery(message.payload as MessagingDelivery);
+          }
+        } catch {
+          // Ignore malformed realtime frames; REST snapshot remains the source of truth.
+        }
+      };
+      socket.onclose = () => {
+        if (closed) return;
+        reconnectTimer = window.setTimeout(connect, 5000);
+      };
+    };
+    connect();
+    return () => {
+      closed = true;
+      if (reconnectTimer) window.clearTimeout(reconnectTimer);
+      socket?.close();
+    };
+  }, [config.baseUrl, config.environment, config.sessionToken, session?.token]);
 
   useEffect(() => {
     const openSignup = () => {

@@ -195,6 +195,15 @@ export const getPortalConfig = (environment: PortalEnvironment): PortalConfig =>
   sessionToken: window.localStorage.getItem('orbi_portal_session_token') || undefined,
 });
 
+export function portalRealtimeUrl(config: PortalConfig) {
+  const base = new URL(config.baseUrl);
+  base.protocol = base.protocol === 'https:' ? 'wss:' : 'ws:';
+  base.pathname = '/v1/portal/realtime';
+  base.search = '';
+  if (config.sessionToken) base.searchParams.set('token', config.sessionToken);
+  return base.toString();
+}
+
 function shouldUseBff(config: PortalConfig) {
   return Boolean(config.bffBaseUrl);
 }
