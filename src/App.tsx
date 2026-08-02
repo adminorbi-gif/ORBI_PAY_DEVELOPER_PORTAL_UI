@@ -1044,6 +1044,7 @@ function Overview({ role, state, config, refresh }: { role: PortalRole; state: P
 function Services({ config, state, refresh, role }: { config: PortalConfig; state: PortalState; refresh: () => void; role: PortalRole }) {
   const services = state.snapshot?.services || [];
   const applications = state.snapshot?.applications || [];
+  const billingPlanSummary = state.snapshot?.billingPlanSummary;
 
   return (
     <div className="stack">
@@ -1052,7 +1053,14 @@ function Services({ config, state, refresh, role }: { config: PortalConfig; stat
         {services.length ? (
           <div className="service-grid">
             {services.map((service, index) => (
-              <ServiceCard config={config} service={service} refresh={refresh} role={role} key={String(service.serviceCode || service.code || index)} />
+              <ServiceCard
+                config={config}
+                service={service}
+                billingPlanSummary={billingPlanSummary}
+                refresh={refresh}
+                role={role}
+                key={String(service.serviceCode || service.code || index)}
+              />
             ))}
           </div>
         ) : (
@@ -1565,7 +1573,19 @@ function UsageMeteringReadiness({ snapshot }: { snapshot?: PortalSnapshot }) {
   );
 }
 
-function ServiceCard({ config, service, refresh, role }: { config: PortalConfig; service: ServiceRecord; refresh: () => void; role: PortalRole }) {
+function ServiceCard({
+  config,
+  service,
+  billingPlanSummary,
+  refresh,
+  role,
+}: {
+  config: PortalConfig;
+  service: ServiceRecord;
+  billingPlanSummary?: PortalSnapshot['billingPlanSummary'];
+  refresh: () => void;
+  role: PortalRole;
+}) {
   const code = String(service.serviceCode || service.code || 'unknown-service');
   const granted = arrayValue(service, 'scopesGranted', 'scopes_granted', 'scopesApproved', 'scopes_approved');
   const pending = arrayValue(service, 'scopesPending', 'scopes_pending');
@@ -1621,9 +1641,69 @@ function ServiceCard({ config, service, refresh, role }: { config: PortalConfig;
       {['operator', 'admin'].includes(role) && (
         <>
           <ServiceStatusActions config={config} serviceCode={code} status={String(service.status || '')} refresh={refresh} />
+          <BillingPlanActions config={config} serviceCode={code} billingPlanSummary={billingPlanSummary} refresh={refresh} />
         </>
       )}
     </article>
+  );
+}
+
+function BillingPlanActions({
+  config,
+  serviceCode,
+  billingPlanSummary,
+  refresh,
+}: {
+  config: PortalConfig;
+  serviceCode: string;
+  billingPlanSummary?: PortalSnapshot['billingPlanSummary'];
+  refresh: () => void;
+}) {
+  const plans = billingPlanSummary?.planCatalog || [];
+  const assignment = (billingPlanSummary?.assignments || []).find((item) => item.serviceCode === serviceCode);
+  const [planCode, setPlanCode] = useState(String(assignment?.planCode || 'sandbox_free'));
+  const [message, setMessage] = useState<string>();
+  const [working, setWorking] = useState(false);
+
+  useEffect(() => {
+    setPlanCode(String(assignment?.planCode || 'sandbox_free'));
+  }, [assignment?.planCode]);
+
+  const updatePlan = async () => {
+    const reason = `Assign ${serviceCode} to ${planCode} billing plan.`;
+    if (!window.confirm(`${reason}\n\nContinue?`)) return;
+    setWorking(true);
+    const result = await gatewayRequest(config, `/v1/developer/services/${encodeURIComponent(serviceCode)}/billing-plan`, 'operator', {
+      method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason,
+      body: JSON.stringify({
+        planCode,
+        reason,
+        assignedBy: readStoredPortalSession()?.user.email || 'portal-operator',
+      }),
+    });
+    setMessage(result.ok ? `Plan changed to ${planCode}.` : result.error);
+    setWorking(false);
+    if (result.ok) refresh();
+  };
+
+  return (
+    <div className="service-actions">
+      <select value={planCode} onChange={(event) => setPlanCode(event.target.value)} disabled={working}>
+        {plans.length === 0 && <option value="sandbox_free">Sandbox Free</option>}
+        {plans.map((plan) => (
+          <option value={String(plan.planCode || 'sandbox_free')} key={String(plan.planCode || 'sandbox_free')}>
+            {String(plan.displayName || plan.planCode || 'Plan')}
+          </option>
+        ))}
+      </select>
+      <button className="ghost-action" disabled={working || planCode === String(assignment?.planCode || 'sandbox_free')} onClick={updatePlan}>
+        Change plan
+      </button>
+      <small>Current: {String(assignment?.planCode || 'sandbox_free')} · {Number(assignment?.dailyCallLimit || 1000).toLocaleString()} calls/day</small>
+      {message && <small>{message}</small>}
+    </div>
   );
 }
 
