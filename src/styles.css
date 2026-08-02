@@ -314,6 +314,7 @@ a {
 }
 
 .mini-link {
+  flex: 0 0 auto;
   border: 0;
   padding: 8px 10px;
   color: var(--brand);
@@ -321,6 +322,19 @@ a {
   border-radius: 999px;
   font-size: 12px;
   font-weight: 900;
+}
+
+.staff-shell .role-badge {
+  background: rgba(236, 253, 245, 0.96);
+  border-color: rgba(167, 243, 208, 0.42);
+}
+
+.staff-shell .role-badge strong {
+  color: #0f172a;
+}
+
+.staff-shell .role-badge span {
+  color: #64748b;
 }
 
 .role-badge {
@@ -3074,15 +3088,16 @@ textarea:focus-visible {
 }
 
 .app-shell {
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 320px minmax(0, 1fr);
 }
 
 .sidebar {
   gap: 14px;
-  padding: 18px 16px;
+  padding: 18px;
   background: rgba(255, 255, 255, 0.96);
   border-right-color: var(--line);
   backdrop-filter: blur(12px);
+  overflow: hidden;
 }
 
 .brand {
@@ -3110,7 +3125,19 @@ textarea:focus-visible {
 
 .nav-list {
   gap: 3px;
+  min-height: 0;
   padding-right: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.32) transparent;
+}
+
+.nav-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.nav-list::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.32);
+  border-radius: 999px;
 }
 
 .nav-item {
@@ -3120,6 +3147,14 @@ textarea:focus-visible {
   border-radius: 12px;
   font-size: 13px;
   font-weight: 600;
+  min-width: 0;
+}
+
+.nav-item span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .nav-item:hover {
@@ -3131,8 +3166,35 @@ textarea:focus-visible {
 }
 
 .sidebar-user {
-  padding: 11px;
+  padding: 12px;
   border-radius: 16px;
+  overflow: hidden;
+}
+
+.staff-shell .sidebar-user {
+  background: rgba(236, 253, 245, 0.96);
+  border-color: rgba(167, 243, 208, 0.42);
+}
+
+.staff-shell .sidebar-user strong {
+  color: #0f172a;
+}
+
+.staff-shell .sidebar-user small {
+  color: #0f766e;
+}
+
+.staff-shell .sidebar-user span {
+  color: #475569;
+}
+
+.sidebar-user strong,
+.sidebar-user small,
+.sidebar-user span {
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .avatar {
@@ -3476,6 +3538,7 @@ textarea {
 
   .sidebar {
     position: fixed;
+    width: min(320px, calc(100vw - 24px));
     transform: translateX(-104%);
     transition: transform 220ms ease;
     box-shadow: 30px 0 80px rgba(2, 6, 23, 0.18);
