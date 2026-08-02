@@ -1229,10 +1229,36 @@ function ApplicationApproval({ config, application, refresh }: { config: PortalC
     if (result.ok) refresh();
   };
 
+  const reject = async () => {
+    const reason = window.prompt('Why is this production/sandbox access request being rejected?');
+    if (!reason?.trim() || reason.trim().length < 10) {
+      setMessage('Add a clear rejection reason with at least 10 characters.');
+      return;
+    }
+    if (!window.confirm(`Reject this access request?\n\nReason: ${reason.trim()}`)) return;
+    setWorking(true);
+    setOneTimeSecrets(undefined);
+    const result = await gatewayRequest<Record<string, unknown>>(config, `/v1/developer/service-applications/${encodeURIComponent(applicationId)}/reject`, 'operator', {
+      method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason.trim(),
+      body: JSON.stringify({
+        decidedBy: readStoredPortalSession()?.user.email || 'portal-operator',
+        reason: reason.trim(),
+      }),
+    });
+    setMessage(result.ok ? 'Request rejected and recorded.' : result.error);
+    setWorking(false);
+    if (result.ok) refresh();
+  };
+
   return (
     <div className="row-actions">
       <button className="ghost-action" disabled={!canApprove || working} onClick={approve}>
         <Check size={14} /> Approve
+      </button>
+      <button className="ghost-action danger-action" disabled={!canApprove || working} onClick={reject}>
+        <X size={14} /> Reject
       </button>
       {message && <small>{message}</small>}
       {oneTimeSecrets && (
