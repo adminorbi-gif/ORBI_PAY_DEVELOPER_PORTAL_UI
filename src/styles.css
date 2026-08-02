@@ -588,6 +588,12 @@ a {
   border-color: #fecaca;
 }
 
+.inline-message.success {
+  color: #065f46;
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
 .connection-banner span,
 .empty-state span {
   display: block;

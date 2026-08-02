@@ -875,6 +875,8 @@ function Overview({ role, state, config, refresh }: { role: PortalRole; state: P
   const failedWebhooks = (snapshot?.webhookDeliveries || []).filter((item) => String(item.status || '').toLowerCase() === 'failed');
   const activeIncidents = (snapshot?.incidents || []).filter((item) => String(item.status || '').toLowerCase() !== 'resolved');
   const activeServices = (snapshot?.services || []).filter((service) => String(service.status || '').toLowerCase() === 'active');
+  const suspendedServices = (snapshot?.services || []).filter((service) => String(service.status || '').toLowerCase() === 'suspended');
+  const suspendedAccounts = (snapshot?.portalUsers || []).filter((user) => user.enabled === false);
   const pendingApplications = (snapshot?.applications || []).filter((app) =>
     ['pending_review', 'draft'].includes(String(app.status || '').toLowerCase()),
   );
@@ -924,6 +926,7 @@ function Overview({ role, state, config, refresh }: { role: PortalRole; state: P
             <MetricCard label="Access reviews" value={String(pendingApplications.length)} tone="warning" detail="Developer requests waiting for a decision" />
             <MetricCard label="Webhook recovery" value={String(failedWebhooks.length)} tone={failedWebhooks.length ? 'warning' : 'success'} detail="Failed payment updates available for replay" />
             <MetricCard label="Risk queue" value={String(activeIncidents.length)} tone={activeIncidents.length ? 'danger' : 'success'} detail={activeIncidents.length ? 'Incident response required' : 'No active incidents'} />
+            <MetricCard label="Suspended access" value={String(suspendedServices.length + suspendedAccounts.length)} tone={(suspendedServices.length + suspendedAccounts.length) ? 'warning' : 'success'} detail="Paused integrations and portal accounts" />
           </>
         ) : (
           <>
@@ -2587,6 +2590,10 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
   const [liveAccess, setLiveAccess] = useState(false);
   const [message, setMessage] = useState<string>();
   const [working, setWorking] = useState(false);
+  const enabledUsers = users.filter((user) => user.enabled !== false);
+  const suspendedUsers = users.filter((user) => user.enabled === false);
+  const adminUsers = users.filter((user) => user.role === 'admin' && user.enabled !== false);
+  const mfaNotReady = users.filter((user) => user.mfaRequired && user.mfaStatus !== 'active' && user.enabled !== false);
 
   const loadOwnMfa = async () => {
     setMessage(undefined);
@@ -2826,6 +2833,12 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
         <p className="security-note">
           Invite each staff member with their own login, role, integration codes, MFA, and audit trail. Do not share passwords across a team.
         </p>
+        <div className="credential-readiness-grid">
+          <MetricCard label="Active users" value={String(enabledUsers.length)} tone="success" detail="Developer and staff accounts that can sign in" />
+          <MetricCard label="Suspended users" value={String(suspendedUsers.length)} tone={suspendedUsers.length ? 'warning' : 'success'} detail="Accounts blocked from portal access" />
+          <MetricCard label="Admins" value={String(adminUsers.length)} tone={adminUsers.length ? 'info' : 'warning'} detail="Accounts with full BaaS control" />
+          <MetricCard label="MFA attention" value={String(mfaNotReady.length)} tone={mfaNotReady.length ? 'warning' : 'success'} detail="Enabled users still needing authenticator setup" />
+        </div>
         <div className="form-grid">
           <label>Name<input value={name} onChange={(event) => setName(event.target.value)} placeholder="Jane Operator" /></label>
           <label>Email<input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="jane@company.com" /></label>
@@ -2868,6 +2881,11 @@ function TeamAccess({ config, state, refresh }: { config: PortalConfig; state: P
             ]}
             rows={[{ label: 'ORBI_PORTAL_INVITE_URL', value: inviteResult.inviteUrl }]}
           />
+        )}
+        {suspendedUsers.length > 0 && (
+          <div className="inline-message warning">
+            {suspendedUsers.length} suspended portal account{suspendedUsers.length === 1 ? '' : 's'} need review before they can access ORBI BaaS again.
+          </div>
         )}
       </div>
 
