@@ -2509,6 +2509,7 @@ function Docs({ state, config, routeDocId, standalone = false }: { state: Portal
   const docs = state.snapshot?.docs || [];
   const sdks = state.snapshot?.sdks || [];
   const selectedDoc = (routeDocId ? docs.find((doc) => String(doc.id || '') === routeDocId) : docs[0]) || undefined;
+  const selectedSections = Array.isArray(selectedDoc?.sections) ? selectedDoc.sections as Array<Record<string, unknown>> : [];
   const docsHomeHref = `${portalPublicOrigin()}/docs`;
   return (
     <div className={`docs-portal ${standalone ? 'standalone' : ''}`}>
@@ -2557,6 +2558,18 @@ function Docs({ state, config, routeDocId, standalone = false }: { state: Portal
         </main>
 
         <aside className="docs-context">
+          <div className="docs-context-note docs-toc">
+            <h3>On this page</h3>
+            <div className="docs-toc-list">
+              {selectedSections.length ? selectedSections.map((section, index) => (
+                <a href={`#section-${index + 1}`} key={`${String(selectedDoc?.id || 'doc')}-toc-${index}`}>
+                  <span>{String(index + 1).padStart(2, '0')}</span>
+                  {String(section.heading || `Step ${index + 1}`)}
+                </a>
+              )) : <p>Select a guide to view its sections.</p>}
+            </div>
+          </div>
+
           <div className="docs-context-note">
             <StatusPill tone="success">SDK first</StatusPill>
             <h3>Use official SDKs</h3>
@@ -3243,7 +3256,7 @@ function DocReader({ item, docsHomeHref }: { item: Record<string, unknown>; docs
       </div>
       <div className="doc-section-list">
         {sections.map((section, index) => (
-          <section className="doc-section" key={`${String(item.id || 'doc')}-${index}`}>
+          <section className="doc-section" id={`section-${index + 1}`} key={`${String(item.id || 'doc')}-${index}`}>
             <h3>{String(section.heading || `Step ${index + 1}`)}</h3>
             <p>{String(section.body || '')}</p>
             {section.code ? <pre>{String(section.code)}</pre> : null}

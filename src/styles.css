@@ -1868,6 +1868,14 @@ tr:last-child td {
   overflow-y: auto;
 }
 
+.docs-context {
+  max-height: calc(100dvh - 112px);
+  padding: 16px;
+  border-left: 1px solid rgba(12, 104, 89, 0.12);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .docs-sidebar-head {
   display: flex;
   justify-content: space-between;
@@ -1951,6 +1959,7 @@ tr:last-child td {
 }
 
 .docs-main .doc-section {
+  scroll-margin-top: 96px;
   padding: clamp(24px, 3vw, 38px) 0;
   border: 0;
   border-top: 1px solid rgba(12, 104, 89, 0.12);
@@ -1995,6 +2004,38 @@ tr:last-child td {
   padding: 14px;
   border-radius: 16px;
   font-size: 12px;
+}
+
+.docs-toc {
+  padding-bottom: 16px;
+}
+
+.docs-toc-list {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.docs-toc-list a {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  padding: 8px 0;
+  color: #35534c;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.docs-toc-list a:hover {
+  color: #087f68;
+}
+
+.docs-toc-list span {
+  color: #087f68;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
 }
 
 .docs-sdk-list {
