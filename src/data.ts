@@ -9,6 +9,7 @@ import {
   KeyRound,
   UserCog,
   Network,
+  Send,
   ShieldCheck,
   Terminal,
   Webhook,
@@ -24,6 +25,7 @@ export type SectionId =
   | 'sandbox'
   | 'keys'
   | 'team'
+  | 'messages'
   | 'scopes'
   | 'webhooks'
   | 'health'
@@ -45,6 +47,7 @@ export const navItems: NavItem[] = [
   { id: 'sandbox', label: 'Sandbox', icon: Terminal },
   { id: 'keys', label: 'Keys & Secrets', icon: KeyRound },
   { id: 'team', label: 'Team Access', icon: UserCog },
+  { id: 'messages', label: 'Messages', icon: Send },
   { id: 'scopes', label: 'Permissions', icon: ShieldCheck },
   { id: 'webhooks', label: 'Payment Updates', icon: Webhook },
   { id: 'health', label: 'System Checks', icon: HeartPulse },

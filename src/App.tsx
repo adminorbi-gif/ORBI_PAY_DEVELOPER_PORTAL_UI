@@ -56,6 +56,7 @@ const titleFor: Record<SectionId, string> = {
   sandbox: 'Sandbox',
   keys: 'Credential Vault',
   team: 'Team Access',
+  messages: 'Developer Messages',
   scopes: 'Access Control',
   webhooks: 'Webhook Operations',
   health: 'Gateway Health',
@@ -206,6 +207,10 @@ export function App() {
     setEnvironment('sandbox');
     setSection('overview');
   };
+  const messageNotificationCount = (portalState.snapshot?.messagingDeliveries || [])
+    .filter((delivery) => ['queued', 'sent', 'delivered', 'failed'].includes(String(delivery.status || '').toLowerCase()))
+    .slice(0, 99)
+    .length;
 
   if (docsRouteOpen) {
     return (
@@ -275,6 +280,9 @@ export function App() {
               >
                 <Icon size={18} />
                 <span>{item.label}</span>
+                {item.id === 'messages' && messageNotificationCount > 0 ? (
+                  <b className="nav-count">{messageNotificationCount > 98 ? '99+' : messageNotificationCount}</b>
+                ) : null}
               </button>
             );
           })}
@@ -416,9 +424,9 @@ function roleToAccessLevel(role: PortalRole) {
 
 function isSectionVisibleForRole(section: SectionId, role: PortalRole) {
   if (role === 'public_developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime'].includes(section);
-  if (role === 'developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime', 'keys', 'scopes', 'webhooks', 'health'].includes(section);
-  if (role === 'operator') return ['overview', 'services', 'access', 'keys', 'scopes', 'webhooks', 'health', 'incidents', 'events'].includes(section);
-  return ['overview', 'services', 'access', 'keys', 'team', 'scopes', 'webhooks', 'health', 'incidents', 'events', 'runtime'].includes(section);
+  if (role === 'developer') return ['overview', 'access', 'sandbox', 'docs', 'runtime', 'keys', 'messages', 'scopes', 'webhooks', 'health'].includes(section);
+  if (role === 'operator') return ['overview', 'services', 'access', 'keys', 'messages', 'scopes', 'webhooks', 'health', 'incidents', 'events'].includes(section);
+  return ['overview', 'services', 'access', 'keys', 'team', 'messages', 'scopes', 'webhooks', 'health', 'incidents', 'events', 'runtime'].includes(section);
 }
 
 function roleCanManageServices(role: PortalRole) {
@@ -586,6 +594,7 @@ function SectionRenderer({
   if (section === 'sandbox') return <SandboxSetup config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'keys') return <KeysAndSecrets config={config} state={portalState} refresh={refresh} openKeyModal={openKeyModal} role={role} />;
   if (section === 'team') return <TeamAccess config={config} state={portalState} refresh={refresh} />;
+  if (section === 'messages') return <DeveloperMessages config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'scopes') return <ScopesAndConsent config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'webhooks') return <Webhooks config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'health') return <Health state={portalState} />;
@@ -2748,6 +2757,171 @@ function SecretActions({ config, serviceCode, refresh, role }: { config: PortalC
       {message && <small>{message}</small>}
     </div>
   );
+}
+
+function DeveloperMessages({
+  config,
+  state,
+  refresh,
+  role,
+}: {
+  config: PortalConfig;
+  state: PortalState;
+  refresh: () => void;
+  role: PortalRole;
+}) {
+  const isStaff = roleCanManageServices(role);
+  const users = state.snapshot?.portalUsers || [];
+  const services = state.snapshot?.services || [];
+  const deliveries = state.snapshot?.messagingDeliveries || [];
+  const developerUsers = users.filter((user) => user.role === 'developer');
+  const [recipient, setRecipient] = useState(developerUsers[0]?.email || '');
+  const [channel, setChannel] = useState<'email' | 'sms' | 'push' | 'whatsapp' | 'in_app'>('email');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [reason, setReason] = useState('');
+  const [status, setStatus] = useState<string>();
+  const [working, setWorking] = useState(false);
+
+  const appendTag = (tag: string) => {
+    const clean = tag.startsWith('@') ? tag : `@${tag}`;
+    setBody((current) => `${current}${current && !current.endsWith(' ') ? ' ' : ''}${clean} `);
+  };
+
+  const sendMessage = async () => {
+    setWorking(true);
+    setStatus(undefined);
+    const result = await gatewayRequest<Record<string, unknown>>(config, '/v1/developer/messages', isStaff ? 'operator' : 'none', {
+      method: 'POST',
+      portalReason: reason,
+      body: JSON.stringify({
+        recipientIdentityRef: isStaff ? recipient : 'orbi.developers@gmail.com',
+        channel: isStaff ? channel : 'email',
+        language: 'en',
+        subject: subject.trim() || undefined,
+        message: body,
+        serviceCode: serviceCodeFromMessage(body, services),
+        endpointTags: tagsFromDraft(body),
+        reason,
+      }),
+    });
+    setWorking(false);
+    if (!result.ok) {
+      setStatus(result.error);
+      return;
+    }
+    setStatus(isStaff ? 'Message sent to developer.' : 'Message sent to ORBI IT/Admin.');
+    setSubject('');
+    setBody('');
+    setReason('');
+    refresh();
+  };
+
+  const canSend = body.trim().length >= 8 && reason.trim().length >= 10 && (!isStaff || recipient.trim().length >= 3);
+  const endpointSuggestions = ['/v1/payment-intents', '/v1/paysafe/escrows', '/v1/developer/webhooks', '/v1/identity/resolve'];
+  const recent = deliveries.slice(0, 12);
+
+  return (
+    <div className="stack">
+      <div className="panel wide-panel">
+        <PanelHeader title={isStaff ? 'Send Developer Message' : 'Contact ORBI IT/Admin'} />
+        <p className="section-copy">
+          <StatusPill tone="info">{isStaff ? 'Staff controlled' : 'Support channel'}</StatusPill>{' '}
+          {isStaff
+            ? 'Send a direct operational message to a developer account. Use @tags to attach an integration or endpoint context.'
+            : 'Send a message to ORBI IT/Admin about your integration, keys, webhook, sandbox, or live access request.'}
+        </p>
+
+        <div className="message-composer">
+          {isStaff ? (
+            <label>
+              Developer
+              <select value={recipient} onChange={(event) => setRecipient(event.target.value)}>
+                <option value="">Select developer</option>
+                {developerUsers.map((user) => (
+                  <option key={user.email} value={user.email}>
+                    {user.name} - {user.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <label>
+            Channel
+            <select value={channel} onChange={(event) => setChannel(event.target.value as typeof channel)} disabled={!isStaff}>
+              <option value="email">Email</option>
+              <option value="push">Push</option>
+              <option value="in_app">In-app</option>
+              <option value="sms">SMS</option>
+              <option value="whatsapp">WhatsApp</option>
+            </select>
+          </label>
+          <label>
+            Subject
+            <input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="Short, clear subject" />
+          </label>
+          <label className="span-2">
+            Message
+            <textarea
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              rows={7}
+              placeholder={isStaff ? 'Write a helpful operational message. Example: Please review @orbi-shop webhook failures on @/v1/payment-intents.' : 'Explain what you need help with. Example: I need support with @/v1/payment-intents for @orbi-shop.'}
+            />
+          </label>
+          <label className="span-2">
+            Audit reason
+            <input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Why this message is being sent" />
+          </label>
+        </div>
+
+        <div className="tag-strip">
+          {services.slice(0, 10).map((service) => {
+            const code = String(service.serviceCode || service.code || '');
+            return code ? <button key={code} type="button" onClick={() => appendTag(code)}>@{code}</button> : null;
+          })}
+          {endpointSuggestions.map((endpoint) => (
+            <button key={endpoint} type="button" onClick={() => appendTag(endpoint)}>@{endpoint}</button>
+          ))}
+        </div>
+
+        {status ? <p className="inline-status">{status}</p> : null}
+        <div className="actions-row">
+          <button className="primary-button" disabled={!canSend || working} onClick={sendMessage}>
+            {working ? 'Sending...' : isStaff ? 'Send message' : 'Send to ORBI IT/Admin'}
+          </button>
+        </div>
+      </div>
+
+      <div className="panel wide-panel">
+        <PanelHeader title="Message Activity" />
+        <DataTable
+          columns={['Time', 'To', 'Context', 'Status']}
+          rows={recent.map((delivery) => [
+            formatShortDate(String(delivery.createdAt || '')),
+            String(delivery.recipientIdentityRef || '-'),
+            String(arrayValue((delivery.safeMetadata || {}) as Record<string, unknown>, 'endpointTags').join(', ') || delivery.serviceCode || delivery.templateCode || '-'),
+            <StatusPill tone={String(delivery.status || '').toLowerCase() === 'failed' ? 'danger' : 'success'}>{String(delivery.status || '-')}</StatusPill>,
+          ])}
+          empty="No message activity returned."
+        />
+      </div>
+    </div>
+  );
+}
+
+function tagsFromDraft(value: string) {
+  const matches = value.match(/@[A-Za-z0-9_.:/-]{2,120}/g) || [];
+  return [...new Set(matches.map((tag) => tag.slice(1)))];
+}
+
+function serviceCodeFromMessage(value: string, services: ServiceRecord[]) {
+  const tags = new Set(tagsFromDraft(value).map((tag) => tag.toLowerCase()));
+  const match = services.find((service) => {
+    const code = String(service.serviceCode || service.code || '').toLowerCase();
+    return code && tags.has(code);
+  });
+  return match ? String(match.serviceCode || match.code) : undefined;
 }
 
 function ScopesAndConsent({ config, state, refresh, role }: { config: PortalConfig; state: PortalState; refresh: () => void; role: PortalRole }) {
