@@ -623,6 +623,20 @@ function buildPortalSearchResults(snapshot: PortalSnapshot | undefined, role: Po
   for (const incident of snapshot?.incidents || []) {
     add('incidents', String(incident.title || incident.incidentType || 'Service issue'), `${incident.status || ''} ${incident.message || ''}`, 'Issue');
   }
+  const security = snapshot?.securitySummary;
+  if (security) {
+    add('overview', 'Security control summary', [
+      `health ${security.health || ''}`,
+      `blocked ${security.blockedRequests || 0}`,
+      `signature ${security.signatureFailures || 0}`,
+      `idempotency ${security.idempotencyFailures || 0}`,
+      `origin ${security.originDenials || 0}`,
+      `rate ${security.rateLimitEvents || 0}`,
+    ].join(' '), 'Security');
+    for (const control of security.controls || []) {
+      add('overview', String(control.label || control.code || 'Security control'), String(control.detail || control.status || ''), 'Security');
+    }
+  }
   for (const event of snapshot?.events || []) {
     add('events', String(event.eventType || event.eventId || 'Activity'), `${event.serviceCode || ''} ${event.occurredAt || ''}`, 'Activity');
   }
@@ -1056,6 +1070,7 @@ function OperationsOverview({ snapshot }: { snapshot?: PortalSnapshot }) {
   const incidents = snapshot?.incidents || [];
   const users = snapshot?.portalUsers || [];
   const healthRows = Array.isArray(snapshot?.integrationHealth) ? (snapshot.integrationHealth as Array<Record<string, unknown>>) : [];
+  const securitySummary = snapshot?.securitySummary;
 
   const now = Date.now();
   const last24h = (date?: string) => {
@@ -1099,6 +1114,42 @@ function OperationsOverview({ snapshot }: { snapshot?: PortalSnapshot }) {
 
   return (
     <div className="operations-stack">
+      {securitySummary && (
+        <div className={`security-command ${String(securitySummary.health || 'healthy').toLowerCase()}`}>
+          <div className="security-command-head">
+            <div>
+              <p className="eyebrow">Security command</p>
+              <h2>{securityHealthTitle(securitySummary.health)}</h2>
+              <p>
+                Live controls for request integrity, domain trust, traffic pressure, recovery queue, and developer access.
+              </p>
+            </div>
+            <StatusPill tone={securityHealthTone(securitySummary.health)}>
+              {securityHealthLabel(securitySummary.health)}
+            </StatusPill>
+          </div>
+          <div className="security-command-grid">
+            <MetricCard label="API calls 24h" value={String(securitySummary.apiCalls24h || 0)} tone="info" detail="Recent controlled platform activity" />
+            <MetricCard label="Blocked requests" value={String(securitySummary.blockedRequests || 0)} tone={(securitySummary.blockedRequests || 0) ? 'warning' : 'success'} detail="Denied by policy or runtime control" />
+            <MetricCard label="Signature signals" value={String(securitySummary.signatureFailures || 0)} tone={(securitySummary.signatureFailures || 0) ? 'danger' : 'success'} detail="Invalid, stale, or replayed signed requests" />
+            <MetricCard label="Idempotency" value={String(securitySummary.idempotencyFailures || 0)} tone={(securitySummary.idempotencyFailures || 0) ? 'warning' : 'success'} detail="Missing or unsafe mutation retry evidence" />
+            <MetricCard label="Origin denials" value={String(securitySummary.originDenials || 0)} tone={(securitySummary.originDenials || 0) ? 'warning' : 'success'} detail="Website or callback domains rejected" />
+            <MetricCard label="Rate limits" value={String(securitySummary.rateLimitEvents || 0)} tone={(securitySummary.rateLimitEvents || 0) ? 'warning' : 'success'} detail="Traffic pressure requiring review" />
+          </div>
+          <div className="security-control-list">
+            {(securitySummary.controls || []).map((control) => (
+              <div className={`security-control ${String(control.status || 'ok')}`} key={String(control.code || control.label)}>
+                <StatusPill tone={String(control.status || '') === 'review' ? 'warning' : 'success'}>
+                  {String(control.status || '') === 'review' ? 'Review' : 'OK'}
+                </StatusPill>
+                <strong>{String(control.label || 'Control')}</strong>
+                <span>{String(control.detail || '')}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="ops-metric-grid">
         <MetricCard label="API calls 24h" value={String(apiEvents24h.length)} tone="info" detail="Gateway activity recorded in the audit stream" />
         <MetricCard label="Active accounts" value={String(activeAccounts.length)} tone="success" detail="Enabled developer and staff portal accounts" />
@@ -5301,6 +5352,27 @@ function sdkStatusLabel(status: unknown): string {
   if (value === 'bootstrap_available') return 'Available';
   if (value === 'planned') return 'Planned';
   return String(status || 'Planned').replace(/_/g, ' ');
+}
+
+function securityHealthTone(health: unknown): StatusTone {
+  const value = String(health || '').toLowerCase();
+  if (value === 'critical') return 'danger';
+  if (value === 'attention') return 'warning';
+  return 'success';
+}
+
+function securityHealthLabel(health: unknown): string {
+  const value = String(health || '').toLowerCase();
+  if (value === 'critical') return 'Critical review';
+  if (value === 'attention') return 'Needs attention';
+  return 'Healthy';
+}
+
+function securityHealthTitle(health: unknown): string {
+  const value = String(health || '').toLowerCase();
+  if (value === 'critical') return 'Security controls need immediate review.';
+  if (value === 'attention') return 'Security controls are watching active issues.';
+  return 'Security controls are healthy.';
 }
 
 function valueOf(record: Record<string, unknown>, ...keys: string[]) {

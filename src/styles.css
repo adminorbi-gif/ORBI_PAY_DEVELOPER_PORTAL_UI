@@ -903,6 +903,105 @@ a {
   gap: 18px;
 }
 
+.security-command {
+  padding: clamp(22px, 4vw, 34px);
+  border: 1px solid rgba(13, 148, 136, 0.2);
+  border-radius: 32px;
+  background:
+    radial-gradient(circle at 88% 10%, rgba(45, 212, 191, 0.24), transparent 18rem),
+    linear-gradient(135deg, rgba(240, 253, 250, 0.96), rgba(255, 255, 255, 0.94));
+  box-shadow: var(--shadow);
+}
+
+.security-command.attention {
+  border-color: rgba(245, 158, 11, 0.28);
+  background:
+    radial-gradient(circle at 88% 10%, rgba(251, 191, 36, 0.2), transparent 18rem),
+    linear-gradient(135deg, rgba(255, 251, 235, 0.96), rgba(255, 255, 255, 0.94));
+}
+
+.security-command.critical {
+  border-color: rgba(239, 68, 68, 0.28);
+  background:
+    radial-gradient(circle at 88% 10%, rgba(248, 113, 113, 0.2), transparent 18rem),
+    linear-gradient(135deg, rgba(254, 242, 242, 0.96), rgba(255, 255, 255, 0.94));
+}
+
+.security-command-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.security-command-head h2 {
+  margin: 7px 0 8px;
+  font-size: clamp(28px, 4vw, 48px);
+  letter-spacing: -0.065em;
+}
+
+.security-command-head p:not(.eyebrow) {
+  max-width: 780px;
+  margin: 0;
+  color: var(--muted);
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.security-command-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.security-command-grid .metric-card {
+  min-height: 138px;
+  padding: 16px;
+  box-shadow: none;
+}
+
+.security-command-grid .metric-card strong {
+  font-size: clamp(24px, 3vw, 34px);
+}
+
+.security-control-list {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.security-control {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.security-control.review {
+  border-color: rgba(245, 158, 11, 0.24);
+  background: rgba(255, 251, 235, 0.72);
+}
+
+.security-control strong,
+.security-control span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.security-control strong {
+  margin: 10px 0 4px;
+}
+
+.security-control span {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 750;
+  line-height: 1.45;
+}
+
 .metric-card,
 .panel,
 .doc-card {
@@ -3958,6 +4057,8 @@ textarea {
   .message-center-grid,
   .message-composer,
   .governance-strip,
+  .security-command-grid,
+  .security-control-list,
   .credential-readiness-grid,
   .compact-composer {
     grid-template-columns: 1fr;
@@ -4175,5 +4276,9 @@ textarea {
 
   .benefit-card {
     width: 100%;
+  }
+
+  .security-command-head {
+    display: grid;
   }
 }

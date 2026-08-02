@@ -157,6 +157,31 @@ export type OperatorIncident = Record<string, unknown> & {
   updatedAt?: string;
 };
 
+export type PortalSecuritySummary = Record<string, unknown> & {
+  generatedAt?: string;
+  health?: 'healthy' | 'attention' | 'critical' | string;
+  apiCalls24h?: number;
+  blockedRequests?: number;
+  signatureFailures?: number;
+  idempotencyFailures?: number;
+  originDenials?: number;
+  rateLimitEvents?: number;
+  failedWebhooks?: number;
+  failedMessages?: number;
+  openIncidents?: number;
+  criticalIncidents?: number;
+  activeServices?: number;
+  suspendedServices?: number;
+  pendingAccess?: number;
+  sdkReady?: number;
+  controls?: Array<{
+    code?: string;
+    label?: string;
+    status?: 'ok' | 'review' | string;
+    detail?: string;
+  }>;
+};
+
 export type SandboxAccount = Record<string, unknown> & {
   id?: string;
   name?: string;
@@ -185,6 +210,7 @@ export type PortalSnapshot = {
   portalTeamInvitations?: PortalTeamInvitation[];
   portalAudit?: Array<Record<string, unknown>>;
   incidents?: OperatorIncident[];
+  securitySummary?: PortalSecuritySummary;
 };
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');
