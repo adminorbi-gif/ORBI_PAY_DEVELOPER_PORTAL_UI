@@ -537,10 +537,10 @@ function EnvironmentSwitch({
 }) {
   return (
     <div className={`environment-context ${compact ? 'compact' : ''} ${roleCanManageServices(role) ? 'staff' : 'developer'}`}>
-      <span>{roleCanManageServices(role) ? 'Workspace' : 'Access'}</span>
+      <span>{roleCanManageServices(role) ? 'Control environment' : 'Access'}</span>
       <strong>
         {roleCanManageServices(role)
-          ? `${environment === 'live' ? 'Production' : 'Sandbox'} operations`
+          ? `${environment === 'live' ? 'Production' : 'Sandbox'} control`
           : 'Sandbox workspace'}
       </strong>
     </div>
