@@ -1265,6 +1265,150 @@ tr:last-child td {
   gap: 12px;
 }
 
+.baas-phase-panel {
+  display: grid;
+  gap: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(8, 127, 104, 0.13), transparent 32%),
+    linear-gradient(135deg, #ffffff 0%, #f3fbf8 100%);
+}
+
+.phase-panel-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 18px;
+}
+
+.phase-panel-head h2 {
+  margin: 6px 0 8px;
+  font-size: clamp(26px, 3.2vw, 42px);
+  letter-spacing: -0.045em;
+}
+
+.phase-panel-head p:not(.eyebrow) {
+  max-width: 780px;
+  margin: 0;
+  color: var(--muted);
+}
+
+.phase-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.phase-card {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.phase-card.ready {
+  border-color: rgba(8, 127, 104, 0.22);
+  background: #f0fdf8;
+}
+
+.phase-card > span {
+  color: #087f68;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.phase-card h3 {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.phase-card p,
+.phase-card small {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.key-safety-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 18px;
+  align-items: center;
+  background:
+    radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 30%),
+    linear-gradient(135deg, #ffffff, #f7fbff);
+}
+
+.key-safety-panel h2 {
+  margin: 6px 0 8px;
+  font-size: clamp(25px, 3vw, 38px);
+}
+
+.key-safety-panel p:not(.eyebrow) {
+  margin: 0;
+  color: var(--muted);
+}
+
+.key-rule-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.key-rule-grid div {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.key-rule-grid strong,
+.key-rule-grid span {
+  display: block;
+}
+
+.key-rule-grid strong {
+  font-size: 13px;
+}
+
+.key-rule-grid span {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.simulator-script {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin: 12px 0;
+  padding: 14px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #f8fbfa;
+}
+
+.simulator-script strong {
+  font-size: 13px;
+}
+
+.simulator-script span {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .step-card {
   display: grid;
   gap: 10px;
@@ -3086,6 +3230,7 @@ textarea {
   .docs-workspace,
   .endpoint-grid,
   .method-grid,
+  .phase-grid,
   .access-grid,
   .step-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3180,8 +3325,18 @@ textarea {
   .incident-card,
   .incident-meta-grid,
   .access-grid,
+  .phase-grid,
   .step-grid,
   .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .phase-panel-head {
+    grid-template-columns: 1fr;
+  }
+
+  .key-safety-panel,
+  .key-rule-grid {
     grid-template-columns: 1fr;
   }
 

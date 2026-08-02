@@ -1334,6 +1334,8 @@ function SandboxSetup({ config, state, refresh, role }: { config: PortalConfig; 
         </div>
       </div>
 
+      <BaasLaunchPhases state={state} role={role} />
+
       <div className="panel wide-panel">
         <PanelHeader title="Sandbox Checklist" />
         <div className="step-grid">
@@ -1364,7 +1366,15 @@ function SandboxSetup({ config, state, refresh, role }: { config: PortalConfig; 
         <div className="panel action-card">
           <Play size={36} />
           <h2>Sandbox Tools</h2>
-          <p>Reset test accounts and start again when you want a clean demo run.</p>
+          <p>Use test accounts to rehearse identity lookup, payment intent, hosted challenge, webhook delivery, and replay without real money.</p>
+          <div className="simulator-script">
+            <strong>Recommended test run</strong>
+            <span>1. Create a sandbox app</span>
+            <span>2. Copy keys to your server</span>
+            <span>3. Create a payment intent</span>
+            <span>4. Approve/decline the hosted challenge</span>
+            <span>5. Verify webhook status in Payment Updates</span>
+          </div>
           <button className="button-primary" onClick={resetSandbox} disabled={running}>
             {running ? 'Running' : 'Reset simulator'}
           </button>
@@ -1378,6 +1388,84 @@ function SandboxSetup({ config, state, refresh, role }: { config: PortalConfig; 
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function BaasLaunchPhases({ state, role }: { state: PortalState; role: PortalRole }) {
+  const services = state.snapshot?.services || [];
+  const applications = state.snapshot?.applications || [];
+  const scopeRequests = state.snapshot?.scopeRequests || [];
+  const sandboxAccounts = state.snapshot?.sandboxAccounts || [];
+  const webhookDeliveries = state.snapshot?.webhookDeliveries || [];
+  const hasSandboxService = services.some((service) => arrayValue(service, 'environments').includes('sandbox'));
+  const hasLiveService = services.some((service) => arrayValue(service, 'environments').includes('live'));
+  const hasKey = services.some((service) => String(valueOf(service, 'keyStatus', 'key_status') || '').toLowerCase().includes('active'));
+  const hasWebhookSecret = services.some((service) => String(valueOf(service, 'webhookSecretStatus', 'webhook_secret_status') || '').toLowerCase().includes('active'));
+  const hasPendingLive = applications.some((app) => arrayValue(app, 'requestedEnvironments', 'requested_environments').includes('live') && String(app.status || '').toLowerCase() === 'pending_review');
+  const hasPendingScopes = scopeRequests.some((request) => String(request.status || '').toLowerCase() === 'pending_review');
+  const hasWebhookTest = webhookDeliveries.length > 0;
+  const phases = [
+    {
+      number: '01',
+      title: 'Create sandbox integration',
+      detail: 'Register your app and get test credentials.',
+      ready: hasSandboxService || applications.length > 0,
+      next: role === 'public_developer' ? 'Create a developer account first.' : 'Use the sandbox app form below.',
+    },
+    {
+      number: '02',
+      title: 'Request permissions',
+      detail: 'Ask only for the ORBI features your product needs.',
+      ready: services.some((service) => arrayValue(service, 'scopesGranted', 'scopes_granted', 'scopesApproved', 'scopes_approved').length > 0),
+      next: hasPendingScopes ? 'Permission review is pending.' : 'Open Get Access and request required scopes.',
+    },
+    {
+      number: '03',
+      title: 'Secure keys and webhooks',
+      detail: 'Use server-side keys and signed payment updates.',
+      ready: hasKey && hasWebhookSecret,
+      next: 'Open Keys & Secrets after approval.',
+    },
+    {
+      number: '04',
+      title: 'Run sandbox tests',
+      detail: 'Use test accounts, simulate payments, and verify callbacks.',
+      ready: sandboxAccounts.length > 0 || hasWebhookTest,
+      next: 'Reset simulator or run a test payment intent.',
+    },
+    {
+      number: '05',
+      title: 'Request production access',
+      detail: 'Submit live URLs, verify domains, and wait for approval.',
+      ready: hasLiveService,
+      next: hasPendingLive ? 'Production review is pending.' : 'Submit the production request form.',
+    },
+  ];
+
+  return (
+    <div className="panel wide-panel baas-phase-panel">
+      <div className="phase-panel-head">
+        <div>
+          <p className="eyebrow">BaaS launch path</p>
+          <h2>Move from sandbox to production without guessing.</h2>
+          <p>These phases use your real portal status so developers know exactly what is ready and what still needs action.</p>
+        </div>
+        <StatusPill tone={hasLiveService ? 'success' : hasPendingLive ? 'warning' : 'info'}>
+          {hasLiveService ? 'Production enabled' : hasPendingLive ? 'Live review pending' : 'Sandbox track'}
+        </StatusPill>
+      </div>
+      <div className="phase-grid">
+        {phases.map((phase) => (
+          <div className={`phase-card ${phase.ready ? 'ready' : 'todo'}`} key={phase.number}>
+            <span>{phase.number}</span>
+            <StatusPill tone={phase.ready ? 'success' : 'neutral'}>{phase.ready ? 'Ready' : 'Next'}</StatusPill>
+            <h3>{phase.title}</h3>
+            <p>{phase.detail}</p>
+            <small>{phase.ready ? 'Completed for at least one integration.' : phase.next}</small>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -1632,25 +1720,42 @@ function KeysAndSecrets({
   const canCreateKeys = roleCanManageServices(role);
 
   return (
-    <div className="panel wide-panel">
-      <PanelHeader title="Integration Keys" action={canCreateKeys ? 'Create key' : undefined} onAction={canCreateKeys ? openKeyModal : undefined} />
-      <DataTable
-        columns={['Integration', 'Status', 'API key', 'Payment update key', 'Environments', 'Actions']}
-        rows={services.map((service) => [
-          String(service.serviceCode || service.code || '-'),
-          <StatusPill tone={toneFromStatus(service.status)}>{String(service.status || 'unknown')}</StatusPill>,
-          String(valueOf(service, 'keyStatus', 'key_status') || 'Not available'),
-          String(valueOf(service, 'webhookSecretStatus', 'webhook_secret_status') || 'Not available'),
-          arrayValue(service, 'environments').join(', ') || '-',
-          <SecretActions config={config} serviceCode={String(service.serviceCode || service.code || '')} refresh={refresh} role={role} />,
-        ])}
-        empty="No integration keys yet."
-      />
-      <p className="security-note">
-        Treat ORBI keys like bank credentials. They are shown once only. Store them in your server secret manager or protected
-        environment variables, never in browser code, mobile apps, Git, logs, screenshots, chat messages, or shared documents.
-        If a key is exposed, rotate it immediately.
-      </p>
+    <div className="stack">
+      <div className="panel wide-panel key-safety-panel">
+        <div>
+          <p className="eyebrow">Key lifecycle</p>
+          <h2>Protect your integration credentials.</h2>
+          <p>
+            Keys are shown once only. Store them in a server secret manager, rotate them safely,
+            and revoke exposed credentials immediately.
+          </p>
+        </div>
+        <div className="key-rule-grid">
+          <div><strong>Server-side only</strong><span>Never expose keys in browser or mobile apps.</span></div>
+          <div><strong>One-time reveal</strong><span>Copy new secrets immediately after issue or rotation.</span></div>
+          <div><strong>Audited rotation</strong><span>Every key action requires a reason and is logged.</span></div>
+        </div>
+      </div>
+      <div className="panel wide-panel">
+        <PanelHeader title="Integration Keys" action={canCreateKeys ? 'Create key' : undefined} onAction={canCreateKeys ? openKeyModal : undefined} />
+        <DataTable
+          columns={['Integration', 'Status', 'API key', 'Payment update key', 'Environments', 'Actions']}
+          rows={services.map((service) => [
+            String(service.serviceCode || service.code || '-'),
+            <StatusPill tone={toneFromStatus(service.status)}>{String(service.status || 'unknown')}</StatusPill>,
+            String(valueOf(service, 'keyStatus', 'key_status') || 'Not available'),
+            String(valueOf(service, 'webhookSecretStatus', 'webhook_secret_status') || 'Not available'),
+            arrayValue(service, 'environments').join(', ') || '-',
+            <SecretActions config={config} serviceCode={String(service.serviceCode || service.code || '')} refresh={refresh} role={role} />,
+          ])}
+          empty="No integration keys yet."
+        />
+        <p className="security-note">
+          Treat ORBI keys like bank credentials. They are shown once only. Store them in your server secret manager or protected
+          environment variables, never in browser code, mobile apps, Git, logs, screenshots, chat messages, or shared documents.
+          If a key is exposed, rotate it immediately.
+        </p>
+      </div>
     </div>
   );
 }
