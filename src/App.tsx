@@ -430,6 +430,18 @@ function sectionFromQuery(query: URLSearchParams): SectionId {
   return navItems.some((item) => item.id === requested) ? (requested as SectionId) : 'overview';
 }
 
+function formatShortDate(value: string) {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleString(undefined, {
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
 function GlobalLoadingOverlay() {
   return (
     <div className="global-loading-overlay" role="status" aria-live="polite">
@@ -725,7 +737,10 @@ function Overview({ role, state }: { role: PortalRole; state: PortalState }) {
 
       <EndpointErrors errors={state.errors} role={role} />
       {isStaff ? (
-        <RecentEvents events={snapshot?.events || []} />
+        <>
+          <OperationsOverview snapshot={snapshot} />
+          <RecentEvents events={snapshot?.events || []} />
+        </>
       ) : (
         <div className="panel wide-panel">
           <PanelHeader title="Your first ORBI integration" />
@@ -781,6 +796,111 @@ function Services({ config, state, refresh, role }: { config: PortalConfig; stat
             <ApplicationApproval config={config} application={app} refresh={refresh} />,
           ])}
           empty="No access applications yet."
+        />
+      </div>
+    </div>
+  );
+}
+
+function OperationsOverview({ snapshot }: { snapshot?: PortalSnapshot }) {
+  const services = snapshot?.services || [];
+  const applications = snapshot?.applications || [];
+  const scopeRequests = snapshot?.scopeRequests || [];
+  const events = snapshot?.events || [];
+  const webhooks = snapshot?.webhookDeliveries || [];
+  const messages = snapshot?.messagingDeliveries || [];
+  const incidents = snapshot?.incidents || [];
+  const users = snapshot?.portalUsers || [];
+  const healthRows = Array.isArray(snapshot?.integrationHealth) ? (snapshot.integrationHealth as Array<Record<string, unknown>>) : [];
+
+  const now = Date.now();
+  const last24h = (date?: string) => {
+    const value = date ? new Date(date).getTime() : 0;
+    return Number.isFinite(value) && value > now - 24 * 60 * 60 * 1000;
+  };
+  const apiEvents24h = events.filter((event) => last24h(String(event.occurredAt || event.createdAt || '')));
+  const activeAccounts = users.filter((user) => user.enabled !== false);
+  const pendingRequests = [
+    ...applications.filter((app) => ['pending_review', 'draft'].includes(String(app.status || '').toLowerCase())),
+    ...scopeRequests.filter((request) => String(request.status || '').toLowerCase() === 'pending_review'),
+  ];
+  const failedServices = services.filter((service) => ['failed', 'suspended', 'revoked'].includes(String(service.status || '').toLowerCase()));
+  const failedWebhooks = webhooks.filter((delivery) => String(delivery.status || '').toLowerCase() === 'failed');
+  const failedMessages = messages.filter((delivery) => String(delivery.status || '').toLowerCase() === 'failed');
+  const abnormalHealth = healthRows.filter((row) => arrayValue(row, 'warnings').length > 0 || String(row.status || '').toLowerCase() === 'attention');
+  const warnings = [
+    ...abnormalHealth.flatMap((row) => arrayValue(row, 'warnings').map((warning) => ({
+      source: String(row.serviceCode || row.displayName || 'Integration'),
+      warning,
+      tone: 'warning' as StatusTone,
+    }))),
+    ...incidents.filter((incident) => String(incident.status || '').toLowerCase() !== 'resolved').map((incident) => ({
+      source: String(incident.incidentType || 'Incident'),
+      warning: String(incident.title || incident.message || 'Operator review required'),
+      tone: String(incident.severity || '').toLowerCase() === 'critical' ? 'danger' as StatusTone : 'warning' as StatusTone,
+    })),
+  ].slice(0, 8);
+
+  const recentActivity = [...events]
+    .sort((a, b) => new Date(String(b.occurredAt || b.createdAt || '')).getTime() - new Date(String(a.occurredAt || a.createdAt || '')).getTime())
+    .slice(0, 8);
+
+  return (
+    <div className="operations-stack">
+      <div className="ops-metric-grid">
+        <MetricCard label="API calls 24h" value={String(apiEvents24h.length)} tone="info" detail="Gateway activity recorded in the audit stream" />
+        <MetricCard label="Active accounts" value={String(activeAccounts.length)} tone="success" detail="Enabled developer and staff portal accounts" />
+        <MetricCard label="Requests waiting" value={String(pendingRequests.length)} tone={pendingRequests.length ? 'warning' : 'success'} detail="Access and permission requests requiring action" />
+        <MetricCard label="Warnings" value={String(warnings.length)} tone={warnings.length ? 'warning' : 'success'} detail="Operational warnings and abnormal integration checks" />
+        <MetricCard label="Failed integrations" value={String(failedServices.length)} tone={failedServices.length ? 'danger' : 'success'} detail="Suspended, revoked, or failed services" />
+        <MetricCard label="Failed deliveries" value={String(failedWebhooks.length + failedMessages.length)} tone={(failedWebhooks.length + failedMessages.length) ? 'danger' : 'success'} detail="Webhook and message deliveries needing recovery" />
+      </div>
+
+      <div className="ops-grid">
+        <div className="panel">
+          <PanelHeader title="Warnings & Abnormal Activity" />
+          <DataTable
+            columns={['Source', 'Signal', 'Severity']}
+            rows={warnings.map((item) => [
+              item.source,
+              item.warning,
+              <StatusPill tone={item.tone}>{item.tone === 'danger' ? 'Critical' : 'Review'}</StatusPill>,
+            ])}
+            empty="No warnings or abnormal integration signals returned."
+          />
+        </div>
+
+        <div className="panel">
+          <PanelHeader title="Failed Integration Delivery" />
+          <DataTable
+            columns={['Type', 'Reference', 'Status']}
+            rows={[
+              ...failedWebhooks.slice(0, 5).map((delivery) => [
+                String(delivery.eventType || 'Webhook'),
+                String(delivery.deliveryId || delivery.id || delivery.resourceId || '-'),
+                <StatusPill tone="danger">Failed</StatusPill>,
+              ]),
+              ...failedMessages.slice(0, 5).map((delivery) => [
+                String(delivery.templateCode || delivery.channel || 'Message'),
+                String(delivery.deliveryId || delivery.eventId || delivery.recipientIdentityRef || '-'),
+                <StatusPill tone="danger">Failed</StatusPill>,
+              ]),
+            ]}
+            empty="No failed webhook or message delivery returned."
+          />
+        </div>
+      </div>
+
+      <div className="panel wide-panel">
+        <PanelHeader title="Recent Platform Activity" />
+        <DataTable
+          columns={['Time', 'Service', 'Activity']}
+          rows={recentActivity.map((event) => [
+            formatShortDate(String(event.occurredAt || event.createdAt || '')),
+            String(event.serviceCode || '-'),
+            String(event.eventType || event.action || '-'),
+          ])}
+          empty="No recent activity returned."
         />
       </div>
     </div>
