@@ -1410,6 +1410,67 @@ a {
   font-size: 12px;
 }
 
+.action-center-panel {
+  border-color: rgba(8, 127, 104, 0.2);
+  background:
+    linear-gradient(135deg, rgba(232, 247, 241, 0.65), rgba(255, 255, 255, 0.96)),
+    var(--surface);
+}
+
+.action-center-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.action-queue {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 170px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.action-queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.action-queue-head strong {
+  font-size: 14px;
+}
+
+.action-row {
+  display: grid;
+  gap: 2px;
+  padding: 10px 0;
+  border-top: 1px solid rgba(225, 232, 229, 0.9);
+}
+
+.action-row.with-action {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.action-row span {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.action-row small,
+.action-queue > small {
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 .incident-list {
   display: grid;
   gap: 14px;
@@ -3984,6 +4045,7 @@ textarea {
   .credential-readiness-grid,
   .ops-grid,
   .ops-metric-grid,
+  .action-center-grid,
   .phase-grid,
   .readiness-list,
   .access-grid,
@@ -4098,6 +4160,7 @@ textarea {
   .docs-workspace,
   .health-grid,
   .service-grid,
+  .action-center-grid,
   .endpoint-grid,
   .method-grid,
   .incident-card,

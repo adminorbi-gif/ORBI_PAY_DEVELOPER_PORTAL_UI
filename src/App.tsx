@@ -840,7 +840,7 @@ function SectionRenderer({
   if (!isSectionVisibleForRole(section, role)) {
     return <AccessDenied role={role} section={section} />;
   }
-  if (section === 'overview') return <Overview role={role} state={portalState} />;
+  if (section === 'overview') return <Overview role={role} state={portalState} config={config} refresh={refresh} />;
   if (section === 'services') return <Services config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'access') return <AccessRequests config={config} state={portalState} refresh={refresh} role={role} />;
   if (section === 'sandbox') return <SandboxSetup config={config} state={portalState} refresh={refresh} role={role} />;
@@ -870,7 +870,7 @@ function AccessDenied({ role, section }: { role: PortalRole; section: SectionId 
   );
 }
 
-function Overview({ role, state }: { role: PortalRole; state: PortalState }) {
+function Overview({ role, state, config, refresh }: { role: PortalRole; state: PortalState; config: PortalConfig; refresh: () => void }) {
   const snapshot = state.snapshot;
   const failedWebhooks = (snapshot?.webhookDeliveries || []).filter((item) => String(item.status || '').toLowerCase() === 'failed');
   const activeIncidents = (snapshot?.incidents || []).filter((item) => String(item.status || '').toLowerCase() !== 'resolved');
@@ -999,6 +999,7 @@ function Overview({ role, state }: { role: PortalRole; state: PortalState }) {
       <EndpointErrors errors={state.errors} role={role} />
       {isStaff ? (
         <>
+          <OperationsActionCenter config={config} snapshot={snapshot} refresh={refresh} />
           <OperationsOverview snapshot={snapshot} />
           <RecentEvents events={snapshot?.events || []} />
         </>
@@ -1243,6 +1244,135 @@ function OperationsOverview({ snapshot }: { snapshot?: PortalSnapshot }) {
           ])}
           empty="No recent activity returned."
         />
+      </div>
+    </div>
+  );
+}
+
+function OperationsActionCenter({
+  config,
+  snapshot,
+  refresh,
+}: {
+  config: PortalConfig;
+  snapshot?: PortalSnapshot;
+  refresh: () => void;
+}) {
+  const [working, setWorking] = useState<string>();
+  const [message, setMessage] = useState<string>();
+  const services = snapshot?.services || [];
+  const failedWebhooks = (snapshot?.webhookDeliveries || []).filter((delivery) => String(delivery.status || '').toLowerCase() === 'failed');
+  const pendingApplications = (snapshot?.applications || []).filter((app) => String(app.status || '').toLowerCase() === 'pending_review');
+  const pendingScopes = (snapshot?.scopeRequests || []).filter((request) => String(request.status || '').toLowerCase() === 'pending_review');
+  const riskyServices = services.filter((service) => ['active', 'failed'].includes(String(service.status || '').toLowerCase()));
+
+  const replayWebhook = async (delivery: WebhookDelivery) => {
+    const deliveryId = String(delivery.deliveryId || delivery.id || '');
+    if (!deliveryId) return;
+    const reason = `Replay failed payment update ${deliveryId}.`;
+    if (!window.confirm(`${reason}\n\nContinue?`)) return;
+    setWorking(`webhook:${deliveryId}`);
+    const result = await gatewayRequest(config, `/v1/developer/webhook-deliveries/${encodeURIComponent(deliveryId)}/replay`, 'operator', {
+      method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason,
+      body: JSON.stringify({ requestId: `portal-action-center-${deliveryId}-${Date.now()}`, reason }),
+    });
+    setMessage(result.ok ? `Replay queued for ${deliveryId}.` : result.error);
+    setWorking(undefined);
+    if (result.ok) refresh();
+  };
+
+  const suspendService = async (service: ServiceRecord) => {
+    const serviceCode = String(service.serviceCode || service.code || '');
+    if (!serviceCode) return;
+    const reason = `Suspend integration ${serviceCode} from operations action center.`;
+    if (!window.confirm(`${reason}\n\nThis may revoke active financial access for this integration.\n\nContinue?`)) return;
+    setWorking(`service:${serviceCode}`);
+    const result = await gatewayRequest(config, `/v1/developer/services/${encodeURIComponent(serviceCode)}/status`, 'operator', {
+      method: 'POST',
+      portalConfirmationAccepted: true,
+      portalReason: reason,
+      body: JSON.stringify({ status: 'suspended', reason, decidedBy: readStoredPortalSession()?.user.email || 'portal-operator' }),
+    });
+    setMessage(result.ok ? `${serviceCode} suspended.` : result.error);
+    setWorking(undefined);
+    if (result.ok) refresh();
+  };
+
+  return (
+    <div className="panel wide-panel action-center-panel">
+      <PanelHeader title="Operations Action Center" action="Refresh" onAction={refresh} />
+      {message && <div className="inline-message">{message}</div>}
+      <div className="action-center-grid">
+        <div className="action-queue">
+          <div className="action-queue-head">
+            <StatusPill tone={pendingApplications.length ? 'warning' : 'success'}>Applications</StatusPill>
+            <strong>{pendingApplications.length} waiting</strong>
+          </div>
+          {pendingApplications.slice(0, 3).map((app) => (
+            <div className="action-row" key={String(app.applicationId || app.serviceCode)}>
+              <span>{String(app.displayName || app.legalName || app.serviceCode || 'Application')}</span>
+              <small>{arrayValue(app, 'requestedScopes', 'requested_scopes').slice(0, 2).join(', ') || 'Access review'}</small>
+            </div>
+          ))}
+          {!pendingApplications.length && <small>No application review is waiting.</small>}
+        </div>
+        <div className="action-queue">
+          <div className="action-queue-head">
+            <StatusPill tone={pendingScopes.length ? 'warning' : 'success'}>Permissions</StatusPill>
+            <strong>{pendingScopes.length} waiting</strong>
+          </div>
+          {pendingScopes.slice(0, 3).map((request) => (
+            <div className="action-row" key={String(request.requestId || request.serviceCode)}>
+              <span>{String(request.serviceCode || 'Integration')}</span>
+              <small>{arrayValue(request, 'requestedScopes', 'requested_scopes').slice(0, 2).join(', ') || 'Permission review'}</small>
+            </div>
+          ))}
+          {!pendingScopes.length && <small>No permission review is waiting.</small>}
+        </div>
+        <div className="action-queue">
+          <div className="action-queue-head">
+            <StatusPill tone={failedWebhooks.length ? 'danger' : 'success'}>Webhooks</StatusPill>
+            <strong>{failedWebhooks.length} failed</strong>
+          </div>
+          {failedWebhooks.slice(0, 3).map((delivery) => {
+            const deliveryId = String(delivery.deliveryId || delivery.id || '');
+            return (
+              <div className="action-row with-action" key={deliveryId || String(delivery.resourceId)}>
+                <div>
+                  <span>{String(delivery.eventType || 'Payment update')}</span>
+                  <small>{deliveryId || String(delivery.resourceId || '-')}</small>
+                </div>
+                <button className="ghost-action" disabled={!deliveryId || working === `webhook:${deliveryId}`} onClick={() => replayWebhook(delivery)}>
+                  Replay
+                </button>
+              </div>
+            );
+          })}
+          {!failedWebhooks.length && <small>No failed payment update needs replay.</small>}
+        </div>
+        <div className="action-queue">
+          <div className="action-queue-head">
+            <StatusPill tone="info">Risk control</StatusPill>
+            <strong>{riskyServices.length} services</strong>
+          </div>
+          {riskyServices.slice(0, 3).map((service) => {
+            const serviceCode = String(service.serviceCode || service.code || '');
+            return (
+              <div className="action-row with-action" key={serviceCode}>
+                <div>
+                  <span>{String(service.displayName || service.legalName || serviceCode)}</span>
+                  <small>{serviceCode}</small>
+                </div>
+                <button className="ghost-action danger-action" disabled={!serviceCode || working === `service:${serviceCode}`} onClick={() => suspendService(service)}>
+                  Suspend
+                </button>
+              </div>
+            );
+          })}
+          {!riskyServices.length && <small>No active service returned for risk action.</small>}
+        </div>
       </div>
     </div>
   );
