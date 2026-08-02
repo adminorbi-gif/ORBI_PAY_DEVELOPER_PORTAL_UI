@@ -182,6 +182,28 @@ export type PortalSecuritySummary = Record<string, unknown> & {
   }>;
 };
 
+export type UsageMeteringSummary = Record<string, unknown> & {
+  generatedAt?: string;
+  windowHours?: number;
+  totalRequests?: number;
+  successfulRequests?: number;
+  failedRequests?: number;
+  averageLatencyMs?: number;
+  activeDevelopers?: number;
+  activeServices?: number;
+  byService?: Array<{
+    serviceCode?: string;
+    requests?: number;
+    failures?: number;
+    averageLatencyMs?: number;
+  }>;
+  byRoute?: Array<{
+    route?: string;
+    requests?: number;
+    failures?: number;
+  }>;
+};
+
 export type SandboxAccount = Record<string, unknown> & {
   id?: string;
   name?: string;
@@ -211,6 +233,7 @@ export type PortalSnapshot = {
   portalAudit?: Array<Record<string, unknown>>;
   incidents?: OperatorIncident[];
   securitySummary?: PortalSecuritySummary;
+  usageMetering?: UsageMeteringSummary;
 };
 
 const normalizeBaseUrl = (value: string) => value.replace(/\/+$/, '');

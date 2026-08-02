@@ -1462,20 +1462,27 @@ function ObservabilityPanel({ snapshot }: { snapshot?: PortalSnapshot }) {
 
 function UsageMeteringReadiness({ snapshot }: { snapshot?: PortalSnapshot }) {
   const security = snapshot?.securitySummary;
+  const metering = snapshot?.usageMetering;
   const events = snapshot?.events || [];
   const services = snapshot?.services || [];
   const webhooks = snapshot?.webhookDeliveries || [];
   const messages = snapshot?.messagingDeliveries || [];
-  const paymentEvents = events.filter((event) => /payment|intent|escrow|paysafe/i.test(String(event.eventType || event.action || ''))).length;
-  const failedRequests = Number(security?.blockedRequests || 0)
+  const inferredFailedRequests = Number(security?.blockedRequests || 0)
     + Number(security?.signatureFailures || 0)
     + Number(security?.idempotencyFailures || 0)
     + Number(security?.originDenials || 0)
     + Number(security?.rateLimitEvents || 0);
-  const activeDevelopers = (snapshot?.portalUsers || []).filter((user) => user.role === 'developer' && user.enabled !== false).length;
-  const activeServices = services.filter((service) => String(service.status || '').toLowerCase() === 'active').length;
+  const inferredActiveDevelopers = (snapshot?.portalUsers || []).filter((user) => user.role === 'developer' && user.enabled !== false).length;
+  const inferredActiveServices = services.filter((service) => String(service.status || '').toLowerCase() === 'active').length;
+  const totalRequests = Number(metering?.totalRequests ?? security?.apiCalls24h ?? events.length);
+  const failedRequests = Number(metering?.failedRequests ?? inferredFailedRequests);
+  const averageLatencyMs = Number(metering?.averageLatencyMs ?? 0);
+  const activeDevelopers = Number(metering?.activeDevelopers ?? inferredActiveDevelopers);
+  const activeServices = Number(metering?.activeServices ?? inferredActiveServices);
   const updateDeliveries = webhooks.length + messages.length;
-  const billingReady = Boolean(security?.apiCalls24h || events.length || updateDeliveries || activeServices);
+  const billingReady = Boolean(totalRequests || updateDeliveries || activeServices);
+  const topServices = metering?.byService || [];
+  const topRoutes = metering?.byRoute || [];
 
   return (
     <div className="panel wide-panel metering-panel">
@@ -1485,13 +1492,39 @@ function UsageMeteringReadiness({ snapshot }: { snapshot?: PortalSnapshot }) {
         payment activity, and delivery volume. This panel shows the current metering signals available to operators.
       </p>
       <div className="observability-grid">
-        <MetricCard label="API calls" value={String(security?.apiCalls24h || events.length)} tone="info" detail="Current activity signal for developer usage" />
-        <MetricCard label="Payment activity" value={String(paymentEvents)} tone={paymentEvents ? 'success' : 'info'} detail="Payment, intent, escrow, or PaySafe events" />
-        <MetricCard label="Update volume" value={String(updateDeliveries)} tone="info" detail="Webhook and security message delivery records" />
+        <MetricCard label="API calls" value={String(totalRequests)} tone="info" detail={`Measured over ${metering?.windowHours || 24} hours`} />
         <MetricCard label="Failed requests" value={String(failedRequests)} tone={failedRequests ? 'warning' : 'success'} detail="Denied, invalid, replay, origin, or rate-limit signals" />
         <MetricCard label="Active developers" value={String(activeDevelopers)} tone="success" detail="Enabled developer accounts" />
+        <MetricCard label="Active services" value={String(activeServices)} tone="success" detail="Services with measurable activity" />
+        <MetricCard label="Avg latency" value={`${averageLatencyMs} ms`} tone={averageLatencyMs > 1500 ? 'warning' : 'info'} detail="Average gateway response time" />
         <MetricCard label="Billing readiness" value={billingReady ? 'Ready' : 'Waiting'} tone={billingReady ? 'success' : 'warning'} detail="Signals available for plan and invoice rules" />
       </div>
+      {(topServices.length > 0 || topRoutes.length > 0) && (
+        <div className="observability-body">
+          {topServices.length > 0 && (
+            <div className="impact-list">
+              <strong>Top integrations</strong>
+              {topServices.slice(0, 5).map((item) => (
+                <div className="impact-row" key={String(item.serviceCode || 'unassigned')}>
+                  <span>{String(item.serviceCode || 'unassigned')}</span>
+                  <b>{Number(item.requests || 0)} calls</b>
+                </div>
+              ))}
+            </div>
+          )}
+          {topRoutes.length > 0 && (
+            <div className="impact-list">
+              <strong>Top operations</strong>
+              {topRoutes.slice(0, 5).map((item) => (
+                <div className="impact-row" key={String(item.route || '/')}>
+                  <span>{String(item.route || '/')}</span>
+                  <b>{Number(item.requests || 0)} calls</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
