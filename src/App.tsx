@@ -106,6 +106,7 @@ const money = new Intl.NumberFormat('en-TZ', {
 
 export function App() {
   const docRouteId = docIdFromPath(window.location.pathname);
+  const docsRouteOpen = window.location.pathname === '/docs' || Boolean(docRouteId);
   const [section, setSection] = useState<SectionId>('overview');
   const [session, setSession] = useState<PortalSession | undefined>(() => readStoredPortalSession());
   const role = session?.user.role || 'public_developer';
@@ -242,7 +243,7 @@ export function App() {
             <Search size={17} />
             <input placeholder="Search integrations, permissions, activity..." />
           </div>
-          <h1>{docRouteId ? 'Developer Docs' : titleFor[section]}</h1>
+          <h1>{docsRouteOpen ? 'Developer Docs' : titleFor[section]}</h1>
           <EnvironmentSwitch environment={environment} setEnvironment={setEnvironment} role={role} snapshot={portalState.snapshot} />
           {roleCanManageServices(role) ? (
             <button className="primary-action" onClick={() => setModal('service')}>
@@ -266,7 +267,7 @@ export function App() {
         </header>
 
         <div className="content">
-          <Breadcrumb section={titleFor[section]} />
+          <Breadcrumb section={docsRouteOpen ? 'Developer Docs' : titleFor[section]} />
           {roleCanManageServices(role) && (
             <>
               <EnterpriseCommandStrip role={role} config={config} state={portalState} environment={environment} />
@@ -279,7 +280,7 @@ export function App() {
               Production mode processes real money. Use only approved live keys and verified customer flows.
             </div>
           )}
-          {docRouteId ? (
+          {docsRouteOpen ? (
             <Docs state={portalState} config={config} routeDocId={docRouteId} />
           ) : (
             <SectionRenderer
@@ -2422,48 +2423,82 @@ function IncidentCard({ config, incident, refresh }: { config: PortalConfig; inc
 function Docs({ state, config, routeDocId }: { state: PortalState; config: PortalConfig; routeDocId?: string }) {
   const docs = state.snapshot?.docs || [];
   const sdks = state.snapshot?.sdks || [];
-  const routedDoc = routeDocId ? docs.find((doc) => String(doc.id || '') === routeDocId) : undefined;
-  if (routeDocId) {
-    return routedDoc ? (
-      <div className="stack">
-        <DocReader item={routedDoc} />
-      </div>
-    ) : (
-      <div className="panel wide-panel">
-        <EmptyState title="Guide is loading" detail="If this stays here, return to Docs and open the guide again." />
-      </div>
-    );
-  }
+  const selectedDoc = (routeDocId ? docs.find((doc) => String(doc.id || '') === routeDocId) : docs[0]) || undefined;
+  const docsHomeHref = `${portalPublicOrigin()}/docs`;
   return (
-    <div className="stack">
-      <div className="panel wide-panel">
-        <PanelHeader title="Developer guides" />
-        <div className="docs-grid">
-          {docs.length ? docs.map((doc, index) => (
-            <DocCard item={doc} key={String(doc.id || index)} />
-          )) : (
-            <EmptyState title="Documentation is temporarily unavailable" detail="Refresh the page or try again shortly." />
-          )}
+    <div className="docs-portal">
+      <section className="docs-hero">
+        <div>
+          <p className="eyebrow">ORBI Pay Developer Docs</p>
+          <h2>Build, test, and launch trusted payment experiences.</h2>
+          <p>
+            Follow the official SDK-first guides for payment profiles, hosted challenges, PaySafe escrow,
+            webhooks, sandbox testing, and production readiness.
+          </p>
         </div>
-      </div>
-      <div className="panel wide-panel">
-        <PanelHeader title="SDK Catalog" />
-        <DataTable
-          columns={['Language', 'Package', 'Status', 'Docs']}
-          rows={sdks.map((sdk) => [
-            String(sdk.language || sdk.id || '-'),
-            String(sdk.packageName || sdk.package || '-'),
-            <StatusPill tone={sdkStatusTone(sdk.status)}>{sdkStatusLabel(sdk.status)}</StatusPill>,
-            <a className="ghost-action" href={sdkDocsHref(config.baseUrl, String(sdk.docsPath || ''))} target="_blank" rel="noreferrer">
-              Open <ExternalLink size={14} />
-            </a>,
-          ])}
-          empty="SDK information is temporarily unavailable."
-        />
-      </div>
-      <div className="panel code-panel">
-      <PanelHeader title="Quick SDK Example" />
-        <pre>{`const orbi = createOrbi({
+        <div className="docs-hero-actions">
+          <a className="button-primary" href={docsHomeHref}>
+            Docs home
+          </a>
+          <a className="ghost-action" href="/?section=runtime">
+            SDK setup <ArrowRight size={14} />
+          </a>
+        </div>
+      </section>
+
+      <div className="docs-workspace">
+        <aside className="docs-sidebar">
+          <div className="docs-sidebar-head">
+            <strong>Guides</strong>
+            <span>{docs.length || 0} resources</span>
+          </div>
+          <div className="docs-nav-list">
+            {docs.length ? docs.map((doc, index) => (
+              <DocNavLink item={doc} active={String(doc.id || '') === String(selectedDoc?.id || '')} key={String(doc.id || index)} />
+            )) : (
+              <EmptyState title="Docs unavailable" detail="Refresh shortly." />
+            )}
+          </div>
+        </aside>
+
+        <main className="docs-main">
+          {selectedDoc ? (
+            <DocReader item={selectedDoc} docsHomeHref={docsHomeHref} />
+          ) : (
+            <div className="panel wide-panel">
+              <EmptyState title="Documentation is temporarily unavailable" detail="Refresh the page or try again shortly." />
+            </div>
+          )}
+        </main>
+
+        <aside className="docs-context">
+          <div className="docs-context-card">
+            <StatusPill tone="success">SDK first</StatusPill>
+            <h3>Use official SDKs</h3>
+            <p>Build with `orbi.transfers.send`, hosted payment intents, and verified webhook handlers instead of raw HTTP where possible.</p>
+            <a className="ghost-action" href="/?section=runtime">Open SDK setup</a>
+          </div>
+
+          <div className="docs-context-card">
+            <h3>Terms of use</h3>
+            <p>Keep secret keys server-side, verify every webhook signature, use idempotency keys, and never expose customer financial data without consent.</p>
+          </div>
+
+          <div className="docs-context-card">
+            <h3>SDK catalog</h3>
+            <div className="docs-sdk-list">
+              {sdks.length ? sdks.slice(0, 6).map((sdk, index) => (
+                <a key={String(sdk.id || sdk.language || index)} href={sdkDocsHref(config.baseUrl, String(sdk.docsPath || ''))} target="_blank" rel="noreferrer">
+                  <span>{String(sdk.language || sdk.id || 'SDK')}</span>
+                  <StatusPill tone={sdkStatusTone(sdk.status)}>{sdkStatusLabel(sdk.status)}</StatusPill>
+                </a>
+              )) : <p>SDK catalog is temporarily unavailable.</p>}
+            </div>
+          </div>
+
+          <div className="docs-context-card code-panel">
+            <h3>Quick example</h3>
+            <pre>{`const orbi = createOrbi({
   baseUrl: process.env.ORBI_PAY_GATEWAY_BASE_URL!,
   serviceKey: process.env.ORBI_PAY_SERVICE_KEY!,
   environment: process.env.ORBI_PAY_ENVIRONMENT === 'Production' ? 'Production' : 'Demo',
@@ -2477,6 +2512,8 @@ await orbi.transfers.send({
 }, {
   idempotencyKey: 'payment-intent:merchant:ORDER-10001',
 });`}</pre>
+          </div>
+        </aside>
       </div>
     </div>
   );
@@ -3093,25 +3130,31 @@ function DocCard({ item }: { item: Record<string, unknown> }) {
   );
 }
 
-function DocReader({ item, onClose }: { item: Record<string, unknown>; onClose?: () => void }) {
+function DocNavLink({ item, active }: { item: Record<string, unknown>; active: boolean }) {
+  const id = String(item.id || '');
+  const href = `${portalPublicOrigin()}/docs/${encodeURIComponent(id)}`;
+  return (
+    <a className={`docs-nav-link ${active ? 'active' : ''}`} href={href}>
+      <span>{String(item.category || 'Guide')}</span>
+      <strong>{String(item.title || item.id || 'Developer resource')}</strong>
+      <small>{String(item.description || 'Open guide')}</small>
+    </a>
+  );
+}
+
+function DocReader({ item, docsHomeHref }: { item: Record<string, unknown>; docsHomeHref?: string }) {
   const sections = Array.isArray(item.sections) ? item.sections as Array<Record<string, unknown>> : [];
   return (
-    <article className="panel wide-panel doc-reader">
+    <article className="doc-reader">
       <div className="doc-reader-head">
         <div>
           <StatusPill tone="info">{String(item.category || 'Guide')}</StatusPill>
           <h2>{String(item.title || 'Developer guide')}</h2>
           <p>{String(item.description || '')}</p>
         </div>
-        {onClose ? (
-          <button type="button" className="ghost-action" onClick={onClose}>
-            <X size={14} /> Close
-          </button>
-        ) : (
-          <a className="ghost-action" href="/">
-            <ArrowLeft size={14} /> Portal home
-          </a>
-        )}
+        <a className="ghost-action" href={docsHomeHref || `${portalPublicOrigin()}/docs`}>
+          <ArrowLeft size={14} /> All docs
+        </a>
       </div>
       <div className="doc-section-list">
         {sections.map((section, index) => (
