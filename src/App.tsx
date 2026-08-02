@@ -114,9 +114,10 @@ export function App() {
   const [session, setSession] = useState<PortalSession | undefined>(() => readStoredPortalSession());
   const role = session?.user.role || 'public_developer';
   const currentRole = roleMeta[role];
+  const requestedEnvironment = initialQuery.get('env') === 'live' ? 'live' : 'sandbox';
   const [environment, setEnvironment] = useState<Environment>(
-    roleCanSwitchEnvironment(role)
-      ? ((import.meta.env.VITE_ORBI_PORTAL_ENVIRONMENT === 'live' ? 'live' : 'sandbox') as Environment)
+    initialQuery.get('admin') === 'true'
+      ? requestedEnvironment
       : 'sandbox',
   );
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -135,7 +136,7 @@ export function App() {
   };
 
   useEffect(() => {
-    if (!roleCanSwitchEnvironment(role, portalState.snapshot) && environment !== 'sandbox') {
+    if (!roleCanManageServices(role) && environment !== 'sandbox') {
       setEnvironment('sandbox');
     }
   }, [environment, portalState.snapshot, role]);
@@ -233,20 +234,20 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${roleCanManageServices(role) ? 'staff-shell' : 'developer-shell'}`}>
       <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="brand">
           <div className="orbi-mark">O</div>
           <div>
-            <div className="brand-name">ORBI Pay</div>
-            <div className="brand-subtitle">Developer Portal</div>
+            <div className="brand-name">{roleCanManageServices(role) ? 'ORBI BaaS' : 'ORBI Pay'}</div>
+            <div className="brand-subtitle">{roleCanManageServices(role) ? 'Operations Console' : 'Developer Portal'}</div>
           </div>
           <button className="icon-button mobile-only" onClick={() => setSidebarOpen(false)} aria-label="Close menu">
             <X size={20} />
           </button>
         </div>
 
-        <EnvironmentSwitch environment={environment} setEnvironment={setEnvironment} role={role} snapshot={portalState.snapshot} compact />
+        <EnvironmentSwitch environment={environment} role={role} compact />
         <RoleBadge role={role} />
 
         <nav className="nav-list">
@@ -284,7 +285,7 @@ export function App() {
           <div>
             <strong>{session?.user.name || currentRole.label}</strong>
             <small>{currentRole.subtitle}</small>
-            <span>{config.baseUrl.replace(/^https?:\/\//, '')}</span>
+            <span>{roleCanManageServices(role) ? 'Staff operations access' : session ? 'Developer workspace' : 'Public developer guide'}</span>
           </div>
           {session ? (
             <button className="mini-link" onClick={signOut}>Logout</button>
@@ -309,7 +310,7 @@ export function App() {
             <input placeholder="Search integrations, permissions, activity..." />
           </div>
           <h1>{docsRouteOpen ? 'Developer Docs' : titleFor[section]}</h1>
-          <EnvironmentSwitch environment={environment} setEnvironment={setEnvironment} role={role} snapshot={portalState.snapshot} />
+          <EnvironmentSwitch environment={environment} role={role} />
           {roleCanManageServices(role) ? (
             <button className="primary-action" onClick={() => setModal('service')}>
               <Plus size={18} />
@@ -420,15 +421,6 @@ function isSectionVisibleForRole(section: SectionId, role: PortalRole) {
   return ['overview', 'services', 'access', 'keys', 'team', 'scopes', 'webhooks', 'health', 'incidents', 'events', 'runtime'].includes(section);
 }
 
-function roleCanSwitchEnvironment(role: PortalRole, snapshot?: PortalSnapshot) {
-  if (role === 'operator' || role === 'admin') return true;
-  if (role !== 'developer') return false;
-  return (snapshot?.services || []).some((service) => {
-    const environments = arrayValue(service, 'environments');
-    return String(service.status || '').toLowerCase() === 'active' && environments.includes('sandbox') && environments.includes('live');
-  });
-}
-
 function roleCanManageServices(role: PortalRole) {
   return role === 'operator' || role === 'admin';
 }
@@ -448,34 +440,21 @@ function GlobalLoadingOverlay() {
 
 function EnvironmentSwitch({
   environment,
-  setEnvironment,
   role,
-  snapshot,
   compact = false,
 }: {
   environment: Environment;
-  setEnvironment: (environment: Environment) => void;
   role: PortalRole;
-  snapshot?: PortalSnapshot;
   compact?: boolean;
 }) {
-  if (!roleCanSwitchEnvironment(role, snapshot)) {
-    return (
-      <div className={`environment-lock ${compact ? 'compact' : ''}`}>
-        <span>Sandbox only</span>
-        <strong>Request live access</strong>
-      </div>
-    );
-  }
-
   return (
-    <div className={`environment-switch ${compact ? 'compact' : ''}`}>
-      <button className={environment === 'sandbox' ? 'active' : ''} onClick={() => setEnvironment('sandbox')}>
-        Sandbox
-      </button>
-      <button className={environment === 'live' ? 'active live' : ''} onClick={() => setEnvironment('live')}>
-        Live
-      </button>
+    <div className={`environment-context ${compact ? 'compact' : ''} ${roleCanManageServices(role) ? 'staff' : 'developer'}`}>
+      <span>{roleCanManageServices(role) ? 'Workspace' : 'Access'}</span>
+      <strong>
+        {roleCanManageServices(role)
+          ? `${environment === 'live' ? 'Production' : 'Sandbox'} operations`
+          : 'Sandbox workspace'}
+      </strong>
     </div>
   );
 }

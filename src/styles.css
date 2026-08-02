@@ -173,60 +173,66 @@ a {
   text-transform: uppercase;
 }
 
-.environment-switch {
-  display: flex;
-  flex-shrink: 0;
-  gap: 4px;
-  padding: 5px;
-  background: #eef5f2;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-}
-
-.environment-switch.compact {
-  width: 100%;
-}
-
-.environment-switch button {
-  flex: 1;
-  border: 0;
-  border-radius: 999px;
-  padding: 10px 16px;
-  color: var(--muted);
-  background: transparent;
-  font-size: 13px;
-  font-weight: 800;
-}
-
-.environment-switch button.active {
-  color: white;
-  background: linear-gradient(135deg, var(--brand), #10b981);
-  box-shadow: 0 12px 26px rgba(15, 118, 110, 0.22);
-}
-
-.environment-switch button.active.live {
-  background: linear-gradient(135deg, #0f172a, #dc2626);
-}
-
-.environment-lock {
+.environment-context {
   display: grid;
   gap: 3px;
   padding: 12px 14px;
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
+  background: #eef8f4;
+  border: 1px solid #c8eadf;
   border-radius: 18px;
 }
 
-.environment-lock span {
-  color: #1d4ed8;
+.environment-context.compact {
+  width: 100%;
+}
+
+.environment-context.staff {
+  background: linear-gradient(135deg, #081a17, #0d342d);
+  border-color: rgba(167, 243, 208, 0.16);
+  color: #e8fff7;
+}
+
+.environment-context span {
+  color: var(--brand);
   font-size: 11px;
   font-weight: 900;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
-.environment-lock strong {
+.environment-context.staff span {
+  color: #9df3d3;
+}
+
+.environment-context strong {
   color: #0f172a;
+}
+
+.environment-context.staff strong {
+  color: #ffffff;
+}
+
+.staff-shell .sidebar {
+  background: linear-gradient(180deg, rgba(7, 24, 21, 0.98), rgba(10, 38, 33, 0.96));
+  border-right-color: rgba(167, 243, 208, 0.12);
+}
+
+.staff-shell .brand-name,
+.staff-shell .sidebar-user strong,
+.staff-shell .nav-item {
+  color: #f4fffb;
+}
+
+.staff-shell .brand-subtitle,
+.staff-shell .sidebar-user small,
+.staff-shell .sidebar-user span {
+  color: rgba(232, 255, 247, 0.62);
+}
+
+.staff-shell .nav-item:hover,
+.staff-shell .nav-item.active {
+  color: #081a17;
+  background: #dffced;
 }
 
 .nav-list {
@@ -3034,24 +3040,6 @@ textarea:focus-visible {
   letter-spacing: 0.11em;
 }
 
-.environment-switch {
-  padding: 4px;
-  background: #f2f5f4;
-  border-radius: 13px;
-}
-
-.environment-switch button {
-  padding: 8px 12px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.environment-switch button.active {
-  background: var(--brand);
-  box-shadow: 0 5px 14px rgba(8, 127, 104, 0.18);
-}
-
 .nav-list {
   gap: 3px;
   padding-right: 2px;
@@ -3433,7 +3421,7 @@ textarea {
     display: inline-flex;
   }
 
-  .topbar .environment-switch {
+  .topbar .environment-context {
     display: none;
   }
 
